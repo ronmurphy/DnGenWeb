@@ -88,14 +88,26 @@ export class Renderer {
     // 2. Water
     this._drawWater(ctx, dungeon, cs);
 
-    // 3. Wall outlines
-    this._drawWalls(ctx, dungeon, cs);
-
-    // 3b. Merge: paint over shared interior walls with floor color
-    if (this.mergeRooms) this._eraseInteriorWalls(ctx, dungeon, cs);
+    // 3. Wall outlines (non-merge) or merged exterior edges
+    if (this.mergeRooms) {
+      this._drawMergedWalls(ctx, dungeon, cs);
+    } else {
+      this._drawWalls(ctx, dungeon, cs);
+    }
 
     // 4. Shading / hatching
     this._drawShadings(ctx, dungeon, cs, rng);
+
+    // 4b. Redraw floors on top — covers any hatching that bled inside rooms
+    this._drawFloors(ctx, dungeon, cs);
+    this._drawWater(ctx, dungeon, cs);
+
+    // 4c. Redraw walls on top of the floor redraw
+    if (this.mergeRooms) {
+      this._drawMergedWalls(ctx, dungeon, cs);
+    } else {
+      this._drawWalls(ctx, dungeon, cs);
+    }
 
     // 5. Cracks / floor details
     if (this.showProps) this._drawDetails(ctx, dungeon, cs, rng);
@@ -166,46 +178,109 @@ export class Renderer {
     }
   }
 
-  // ── Merge: erase shared interior walls ─────────────────────────────────────
+  // ── Merge: draw only the exterior boundary of all rooms combined ─────────────
+  //
+  // Algorithm:
+  //  1. Fill a grid with every cell covered by any room (handles true overlaps).
+  //  2. For each occupied cell, emit an edge segment wherever a neighbour is empty.
+  //  3. Merge collinear consecutive segments into single lines.
+  //  4. Stroke the resulting lines — only the outer boundary gets drawn.
 
-  _eraseInteriorWalls(ctx, dungeon, cs) {
-    const wallW = 2 * Style.thick + 1;  // slightly wider than the drawn wall
-    ctx.strokeStyle = Style.floor;
-    ctx.lineWidth   = wallW;
-    ctx.lineCap     = 'butt';
+  _drawMergedWalls(ctx, dungeon, cs) {
+    const floor = this._buildFloorGrid(dungeon);
+    const { hEdges, vEdges } = this._extractExteriorEdges(floor);
 
-    const rooms = dungeon.rooms.filter(r => !r.hidden && !r.round);
-    for (let i = 0; i < rooms.length; i++) {
-      for (let j = i + 1; j < rooms.length; j++) {
-        const a = rooms[i], b = rooms[j];
-        const dir = a.adjacentDir(b);
-        if (!dir) continue;
+    ctx.strokeStyle = Style.ink;
+    ctx.lineWidth   = 2 * Style.thick;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
 
-        // Compute the shared wall segment
-        if (dir.x !== 0) {
-          // vertical shared wall
-          const wallX   = (dir.x > 0 ? a.x + a.w : a.x) * cs;
-          const shareY0 = Math.max(a.y, b.y) * cs;
-          const shareY1 = Math.min(a.y + a.h, b.y + b.h) * cs;
-          if (shareY1 <= shareY0) continue;
-          ctx.beginPath();
-          ctx.moveTo(wallX, shareY0);
-          ctx.lineTo(wallX, shareY1);
-          ctx.stroke();
-        } else {
-          // horizontal shared wall
-          const wallY   = (dir.y > 0 ? a.y + a.h : a.y) * cs;
-          const shareX0 = Math.max(a.x, b.x) * cs;
-          const shareX1 = Math.min(a.x + a.w, b.x + b.w) * cs;
-          if (shareX1 <= shareX0) continue;
-          ctx.beginPath();
-          ctx.moveTo(shareX0, wallY);
-          ctx.lineTo(shareX1, wallY);
-          ctx.stroke();
+    for (const [yStr, segs] of hEdges) {
+      const y = Number(yStr);
+      for (const seg of this._mergeSegs(segs, 'a', 'b')) {
+        ctx.moveTo(seg.a * cs, y * cs);
+        ctx.lineTo(seg.b * cs, y * cs);
+      }
+    }
+    for (const [xStr, segs] of vEdges) {
+      const x = Number(xStr);
+      for (const seg of this._mergeSegs(segs, 'a', 'b')) {
+        ctx.moveTo(x * cs, seg.a * cs);
+        ctx.lineTo(x * cs, seg.b * cs);
+      }
+    }
+    ctx.stroke();
+  }
+
+  /** Build a Set of "gx,gy" strings for every grid cell inside any room. */
+  _buildFloorGrid(dungeon) {
+    const floor = new Set();
+    for (const room of dungeon.rooms) {
+      if (room.hidden) continue;
+      if (room.round) {
+        const cx = room.cx, cy = room.cy, r = room.w / 2, r2 = r * r;
+        const x0 = Math.floor(room.x), y0 = Math.floor(room.y);
+        const x1 = Math.ceil(room.x + room.w), y1 = Math.ceil(room.y + room.h);
+        for (let gx = x0; gx < x1; gx++) {
+          for (let gy = y0; gy < y1; gy++) {
+            const dx = (gx + 0.5) - cx, dy = (gy + 0.5) - cy;
+            if (dx * dx + dy * dy <= r2) floor.add(`${gx},${gy}`);
+          }
+        }
+      } else {
+        for (let gx = room.x; gx < room.x + room.w; gx++) {
+          for (let gy = room.y; gy < room.y + room.h; gy++) {
+            floor.add(`${gx},${gy}`);
+          }
         }
       }
     }
-    ctx.lineCap = 'round';
+    return floor;
+  }
+
+  /** Return horizontal and vertical exterior edge maps from a floor grid. */
+  _extractExteriorEdges(floor) {
+    // hEdges: Map<y_string, [{a:x0, b:x1}]>  — horizontal segments at grid y
+    // vEdges: Map<x_string, [{a:y0, b:y1}]>  — vertical segments at grid x
+    const hEdges = new Map();
+    const vEdges = new Map();
+
+    const addH = (y, x) => {
+      const k = `${y}`;
+      if (!hEdges.has(k)) hEdges.set(k, []);
+      hEdges.get(k).push({ a: x, b: x + 1 });
+    };
+    const addV = (x, y) => {
+      const k = `${x}`;
+      if (!vEdges.has(k)) vEdges.set(k, []);
+      vEdges.get(k).push({ a: y, b: y + 1 });
+    };
+
+    for (const key of floor) {
+      const [gx, gy] = key.split(',').map(Number);
+      if (!floor.has(`${gx},${gy - 1}`)) addH(gy,     gx); // top edge
+      if (!floor.has(`${gx},${gy + 1}`)) addH(gy + 1, gx); // bottom edge
+      if (!floor.has(`${gx - 1},${gy}`)) addV(gx,     gy); // left edge
+      if (!floor.has(`${gx + 1},${gy}`)) addV(gx + 1, gy); // right edge
+    }
+    return { hEdges, vEdges };
+  }
+
+  /** Merge an array of {a, b} unit segments into the minimum set of covering segments. */
+  _mergeSegs(segs, ak, bk) {
+    if (!segs || segs.length === 0) return [];
+    const sorted = [...segs].sort((x, y) => x[ak] - y[ak]);
+    const out = [{ ...sorted[0] }];
+    for (let i = 1; i < sorted.length; i++) {
+      const last = out[out.length - 1];
+      if (sorted[i][ak] <= last[bk]) {
+        last[bk] = Math.max(last[bk], sorted[i][bk]);
+      } else {
+        out.push({ ...sorted[i] });
+      }
+    }
+    return out;
   }
 
   // ── Shading ────────────────────────────────────────────────────────────────
@@ -279,18 +354,23 @@ export class Renderer {
   }
 
   _drawRoomGrid(ctx, room, cs) {
+    if (room.round) {
+      this._drawCircleGrid(ctx, room, cs);
+      return;
+    }
+
     const x0 = room.x * cs, y0 = room.y * cs;
     const x1 = (room.x + room.w) * cs, y1 = (room.y + room.h) * cs;
 
     if (this.gridMode === 'dotted') {
       ctx.setLineDash([1, cs - 1]);
+      ctx.lineDashOffset = 0;
     } else if (this.gridMode === 'dashed') {
       ctx.setLineDash([cs * 0.4, cs * 0.6]);
     } else {
       ctx.setLineDash([]);
     }
 
-    // Save clip to room bounds
     ctx.save();
     ctx.beginPath();
     this._roomPath(ctx, room, cs);
@@ -310,6 +390,55 @@ export class Renderer {
     }
     ctx.setLineDash([]);
     ctx.restore();
+  }
+
+  /** Grid for round rooms: draw directly at intersection points inside the circle
+   *  instead of relying on clipped line-dashes which don't render reliably at the arc edge. */
+  _drawCircleGrid(ctx, room, cs) {
+    const cxPx = room.cx * cs, cyPx = room.cy * cs;
+    const rPx  = (room.w / 2) * cs;
+    const r2   = rPx * rPx;
+
+    const gx0 = Math.ceil(room.x),           gy0 = Math.ceil(room.y);
+    const gx1 = Math.floor(room.x + room.w), gy1 = Math.floor(room.y + room.h);
+
+    if (this.gridMode === 'dotted') {
+      // A filled dot at every grid intersection inside the circle
+      ctx.beginPath();
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gy = gy0; gy <= gy1; gy++) {
+          const dx = gx * cs - cxPx, dy = gy * cs - cyPx;
+          if (dx * dx + dy * dy <= r2) {
+            ctx.moveTo(gx * cs + 0.8, cyPx);
+            ctx.arc(gx * cs, gy * cs, 0.8, 0, Math.PI * 2);
+          }
+        }
+      }
+      ctx.fill();
+    } else {
+      // Dashed / solid: clip lines to the circle as normal
+      ctx.save();
+      ctx.beginPath();
+      this._roomPath(ctx, room, cs);
+      ctx.clip();
+
+      if (this.gridMode === 'dashed') ctx.setLineDash([cs * 0.4, cs * 0.6]);
+
+      for (let gx = gx0; gx <= gx1; gx++) {
+        ctx.beginPath();
+        ctx.moveTo(gx * cs, (room.y) * cs);
+        ctx.lineTo(gx * cs, (room.y + room.h) * cs);
+        ctx.stroke();
+      }
+      for (let gy = gy0; gy <= gy1; gy++) {
+        ctx.beginPath();
+        ctx.moveTo((room.x) * cs, gy * cs);
+        ctx.lineTo((room.x + room.w) * cs, gy * cs);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
   }
 
   // ── Doors ──────────────────────────────────────────────────────────────────

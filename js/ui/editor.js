@@ -298,9 +298,12 @@ export class Editor {
     const ghost = this.renderer.ghostRoom;
     if (ghost.w < 1 || ghost.h < 1) return;
 
-    // Reject if overlaps existing room
-    for (const r of this.dungeon.rooms) {
-      if (ghost.overlaps(r)) return;
+    // In merge mode allow overlaps — rooms will be visually merged.
+    // Otherwise reject rooms that overlap an existing one.
+    if (!this.renderer.mergeRooms) {
+      for (const r of this.dungeon.rooms) {
+        if (ghost.overlaps(r)) return;
+      }
     }
 
     const room = new Room({ x: ghost.x, y: ghost.y, w: ghost.w, h: ghost.h, round: ghost.round });

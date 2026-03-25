@@ -104,6 +104,13 @@ aside {
 
 #dungeon-canvas { display: block; }
 
+#status-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 4px 10px; font-size: 11px; color: var(--text-dim);
+  background: rgba(30,30,46,0.72); backdrop-filter: blur(4px);
+  pointer-events: none; white-space: nowrap; overflow: hidden;
+}
+
 /* ── Export button colours ── */
 #btn-export-png { border-color: var(--accent2); color: var(--accent2); }
 #btn-export-svg { border-color: #a6e3a1; color: #a6e3a1; }
