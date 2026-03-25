@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dungeon Designer</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div id="app">
+
+    <header id="toolbar">
+      <div class="toolbar-group">
+        <span class="app-title">Dungeon Designer</span>
+      </div>
+      <div class="toolbar-group" id="tools">
+        <button class="tool-btn active" data-tool="select" title="Select (V)">&#9654;</button>
+        <button class="tool-btn" data-tool="room" title="Draw Room (R)">&#9633;</button>
+        <button class="tool-btn" data-tool="round-room" title="Draw Round Room (C)">&#9675;</button>
+        <button class="tool-btn" data-tool="door" title="Place Door (D)">&#9044;</button>
+        <button class="tool-btn" data-tool="erase" title="Erase (E)">&#10005;</button>
+      </div>
+      <div class="toolbar-group">
+        <button id="btn-generate" title="Generate random dungeon">Generate</button>
+        <button id="btn-clear" title="Clear canvas">Clear</button>
+      </div>
+      <div class="toolbar-group">
+        <label>Seed <input id="input-seed" type="number" value="12345" min="1" max="999999999"></label>
+      </div>
+      <div class="toolbar-group">
+        <button id="btn-export-png" title="Export as PNG">PNG</button>
+        <button id="btn-export-svg" title="Export as SVG">SVG</button>
+      </div>
+    </header>
+
+    <div id="workspace">
+
+      <aside id="panel-left">
+        <section class="panel-section">
+          <h3>Style</h3>
+          <label>Hatching
+            <select id="sel-hatching">
+              <option value="default">Default</option>
+              <option value="stonework">Stonework</option>
+              <option value="bricks">Bricks</option>
+              <option value="dots">Dots</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+          <label>Grid
+            <select id="sel-grid">
+              <option value="none">None</option>
+              <option value="dotted" selected>Dotted</option>
+              <option value="dashed">Dashed</option>
+              <option value="solid">Solid</option>
+            </select>
+          </label>
+          <label>Ink <input type="color" id="col-ink" value="#1a1a2e"></label>
+          <label>Paper <input type="color" id="col-paper" value="#f5f0e8"></label>
+          <label>Floor <input type="color" id="col-floor" value="#e8e0d0"></label>
+          <label>Shading <input type="color" id="col-shading" value="#c8b89a"></label>
+        </section>
+        <section class="panel-section">
+          <h3>Strokes</h3>
+          <label>Thin <input type="range" id="stroke-thin" min="0.2" max="2" step="0.1" value="0.5"></label>
+          <label>Hatching <input type="range" id="stroke-hatch" min="0.2" max="3" step="0.1" value="1.0"></label>
+          <label>Normal <input type="range" id="stroke-normal" min="0.5" max="3" step="0.1" value="1.5"></label>
+          <label>Thick <input type="range" id="stroke-thick" min="1" max="6" step="0.2" value="3.0"></label>
+        </section>
+        <section class="panel-section">
+          <h3>View</h3>
+          <label>Cell size <input type="range" id="cell-size" min="16" max="64" step="4" value="30"></label>
+          <label><input type="checkbox" id="chk-shadows" checked> Shadows</label>
+          <label><input type="checkbox" id="chk-props" checked> Props</label>
+          <label><input type="checkbox" id="chk-merge"> Merge overlapping rooms</label>
+        </section>
+      </aside>
+
+      <main id="canvas-area">
+        <canvas id="dungeon-canvas"></canvas>
+      </main>
+
+      <aside id="panel-right">
+        <section class="panel-section" id="props-panel">
+          <h3>Properties</h3>
+          <p id="props-empty">Select a room or door to edit its properties.</p>
+          <div id="props-room" style="display:none">
+            <label>Label <input type="text" id="prop-room-label" placeholder="Room name..."></label>
+            <label>Type
+              <select id="prop-room-type">
+                <option value="normal">Normal</option>
+                <option value="entrance">Entrance</option>
+                <option value="boss">Boss Room</option>
+                <option value="treasure">Treasure</option>
+                <option value="trap">Trap</option>
+              </select>
+            </label>
+            <label><input type="checkbox" id="prop-room-water"> Contains water</label>
+            <label>Notes<textarea id="prop-room-notes" rows="4" placeholder="Room description..."></textarea></label>
+            <button id="btn-delete-room" class="danger">Delete Room</button>
+          </div>
+          <div id="props-door" style="display:none">
+            <label>Type
+              <select id="prop-door-type">
+                <option value="open">Open Archway</option>
+                <option value="door">Door</option>
+                <option value="locked">Locked Door</option>
+                <option value="secret">Secret Door</option>
+                <option value="portcullis">Portcullis</option>
+              </select>
+            </label>
+            <button id="btn-delete-door" class="danger">Delete Door</button>
+          </div>
+        </section>
+        <section class="panel-section">
+          <h3>Story</h3>
+          <label>Name <input type="text" id="story-name" placeholder="Dungeon name..."></label>
+          <label>Hook <textarea id="story-hook" rows="3" placeholder="Adventure hook..."></textarea></label>
+        </section>
+      </aside>
+
+    </div>
+
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
