@@ -324,11 +324,10 @@ function randomDoorType(rng) {
 
 // ── BSP Generator ─────────────────────────────────────────────────────────────
 //
-// Builds a binary-space-partition tree, places one room per leaf, then
-// walks back up the tree to connect sibling subtrees with L-shaped corridors.
-// Corridors are added as 1-unit-wide rooms (use Merge mode to see them merged).
-// No live-array mutation during iteration — the old implementation caused an
-// infinite loop by growing dungeon.rooms while iterating over it.
+// Each BSP split stores its direction (splitH). When connecting two sibling
+// subtrees we pick the room CLOSEST TO THE SPLIT BOUNDARY from each side, then
+// draw a corridor that stays entirely in the guaranteed gap between the two
+// partitions — so it can never cross through any room.
 
 export class BSPGenerator {
   generate(seed, tags = []) {
@@ -348,7 +347,6 @@ export class BSPGenerator {
     return dungeon;
   }
 
-  /** Recursively split the node; returns a tree where leaves have .room set. */
   _buildTree(node, depth, maxDepth) {
     if (depth >= maxDepth || node.w < 12 || node.h < 12) {
       node.leaf = true;
@@ -361,31 +359,46 @@ export class BSPGenerator {
       ? Math.floor(this.rng.float(0.4, 0.6) * node.h)
       : Math.floor(this.rng.float(0.4, 0.6) * node.w);
 
-    const minSplit = 6;
-    const dim = splitH ? node.h : node.w;
-    if (s < minSplit || dim - s < minSplit) {
+    if (s < 6 || (splitH ? node.h : node.w) - s < 6) {
       node.leaf = true;
       node.room = this._roomInPartition(node);
       return node;
     }
 
+    node.splitH = splitH;
     if (splitH) {
-      node.left  = this._buildTree({ x: node.x, y: node.y,     w: node.w, h: s         }, depth + 1, maxDepth);
-      node.right = this._buildTree({ x: node.x, y: node.y + s, w: node.w, h: node.h - s }, depth + 1, maxDepth);
+      node.left  = this._buildTree({ x: node.x, y: node.y,     w: node.w, h: s          }, depth + 1, maxDepth);
+      node.right = this._buildTree({ x: node.x, y: node.y + s, w: node.w, h: node.h - s  }, depth + 1, maxDepth);
     } else {
-      node.left  = this._buildTree({ x: node.x,     y: node.y, w: s,         h: node.h }, depth + 1, maxDepth);
+      node.left  = this._buildTree({ x: node.x,     y: node.y, w: s,          h: node.h }, depth + 1, maxDepth);
       node.right = this._buildTree({ x: node.x + s, y: node.y, w: node.w - s, h: node.h }, depth + 1, maxDepth);
     }
     return node;
   }
 
-  /** Return a representative room from this subtree (nearest to centre). */
-  _repRoom(node) {
-    if (node.leaf) return node.room ?? null;
-    return this._repRoom(node.left) ?? this._repRoom(node.right);
+  /** Collect all leaf rooms from a subtree (not corridor rooms). */
+  _gatherRooms(node, out) {
+    if (node.leaf) { if (node.room) out.push(node.room); return; }
+    this._gatherRooms(node.left,  out);
+    this._gatherRooms(node.right, out);
   }
 
-  /** Walk tree, add rooms and connecting corridors to dungeon. */
+  /**
+   * Pick the room from a subtree whose wall is closest to the split boundary.
+   * criterion: 'maxY' | 'minY' | 'maxX' | 'minX'
+   */
+  _closestRoom(node, criterion) {
+    const rooms = [];
+    this._gatherRooms(node, rooms);
+    if (!rooms.length) return null;
+    switch (criterion) {
+      case 'maxY': return rooms.reduce((b, r) => r.y + r.h > b.y + b.h ? r : b);
+      case 'minY': return rooms.reduce((b, r) => r.y < b.y ? r : b);
+      case 'maxX': return rooms.reduce((b, r) => r.x + r.w > b.x + b.w ? r : b);
+      case 'minX': return rooms.reduce((b, r) => r.x < b.x ? r : b);
+    }
+  }
+
   _collectTree(node, dungeon) {
     if (node.leaf) {
       if (node.room) dungeon.addRoom(node.room);
@@ -394,9 +407,10 @@ export class BSPGenerator {
     this._collectTree(node.left,  dungeon);
     this._collectTree(node.right, dungeon);
 
-    const r1 = this._repRoom(node.left);
-    const r2 = this._repRoom(node.right);
-    if (r1 && r2) this._connectRooms(dungeon, r1, r2);
+    // Pick rooms whose walls face the split boundary
+    const r1 = this._closestRoom(node.left,  node.splitH ? 'maxY' : 'maxX');
+    const r2 = this._closestRoom(node.right, node.splitH ? 'minY' : 'minX');
+    if (r1 && r2) this._connectAtSplit(dungeon, r1, r2, node.splitH);
   }
 
   _roomInPartition(part) {
@@ -412,36 +426,53 @@ export class BSPGenerator {
     return new Room({ x, y, w: round ? Math.min(w, h) : w, h: round ? Math.min(w, h) : h, round });
   }
 
-  /** L-shaped corridor clipped to room walls — never overlaps the source/dest rooms. */
-  _connectRooms(dungeon, a, b) {
-    const ay = Math.round(a.cy), ax = Math.round(a.cx);
-    const by = Math.round(b.cy), bx = Math.round(b.cx);
+  /**
+   * Corridor between two rooms across a BSP split boundary.
+   * For a horizontal split: r1 is the bottommost room of the top partition,
+   * r2 is the topmost room of the bottom partition.  The corridor only ever
+   * occupies the gap rows/columns between the two partitions — guaranteed empty.
+   */
+  _connectAtSplit(dungeon, r1, r2, horizontal) {
+    if (horizontal) {
+      const wallA = r1.y + r1.h;   // r1's bottom wall
+      const wallB = r2.y;           // r2's top wall
+      if (wallB <= wallA) return;   // partitions too close (shouldn't happen with margin=2)
 
-    if (this.rng.next() > 0.5) {
-      // H-first: horizontal at ay from A's wall → B's wall, then V down to B if needed
-      const aWx = bx >= ax ? a.x + a.w : a.x;
-      const bWx = bx >= ax ? b.x       : b.x + b.w;
-      const hLen = Math.abs(bWx - aWx);
-      if (hLen > 0)
-        dungeon.addRoom(new Room({ x: Math.min(aWx, bWx), y: ay, w: hLen, h: 1 }));
-      // V jog at bWx if ay is outside B's y range
-      if (ay < b.y)
-        dungeon.addRoom(new Room({ x: bWx, y: ay,       w: 1, h: b.y - ay }));
-      else if (ay > b.y + b.h)
-        dungeon.addRoom(new Room({ x: bWx, y: b.y + b.h, w: 1, h: ay - b.y - b.h }));
+      const xL = Math.max(r1.x, r2.x);
+      const xR = Math.min(r1.x + r1.w, r2.x + r2.w);
 
+      if (xL < xR) {
+        // Rooms share an x overlap — straight vertical corridor through that band
+        const cx = Math.floor((xL + xR) / 2);
+        dungeon.addRoom(new Room({ x: cx, y: wallA, w: 1, h: wallB - wallA }));
+      } else {
+        // No x overlap — L-shape: horizontal along wallA row, then vertical
+        const hx0 = Math.min(Math.round(r1.cx), Math.round(r2.cx));
+        const hx1 = Math.max(Math.round(r1.cx), Math.round(r2.cx));
+        if (hx1 > hx0)
+          dungeon.addRoom(new Room({ x: hx0, y: wallA, w: hx1 - hx0 + 1, h: 1 }));
+        dungeon.addRoom(new Room({ x: Math.round(r2.cx), y: wallA, w: 1, h: wallB - wallA }));
+      }
     } else {
-      // V-first: vertical at ax from A's wall → B's wall, then H across to B if needed
-      const aWy = by >= ay ? a.y + a.h : a.y;
-      const bWy = by >= ay ? b.y       : b.y + b.h;
-      const vLen = Math.abs(bWy - aWy);
-      if (vLen > 0)
-        dungeon.addRoom(new Room({ x: ax, y: Math.min(aWy, bWy), w: 1, h: vLen }));
-      // H jog at bWy if ax is outside B's x range
-      if (ax < b.x)
-        dungeon.addRoom(new Room({ x: ax,       y: bWy, w: b.x - ax,       h: 1 }));
-      else if (ax > b.x + b.w)
-        dungeon.addRoom(new Room({ x: b.x + b.w, y: bWy, w: ax - b.x - b.w, h: 1 }));
+      const wallA = r1.x + r1.w;   // r1's right wall
+      const wallB = r2.x;           // r2's left wall
+      if (wallB <= wallA) return;
+
+      const yT = Math.max(r1.y, r2.y);
+      const yB = Math.min(r1.y + r1.h, r2.y + r2.h);
+
+      if (yT < yB) {
+        // Straight horizontal corridor through the y overlap band
+        const cy = Math.floor((yT + yB) / 2);
+        dungeon.addRoom(new Room({ x: wallA, y: cy, w: wallB - wallA, h: 1 }));
+      } else {
+        // No y overlap — L-shape: vertical along wallA column, then horizontal
+        const vy0 = Math.min(Math.round(r1.cy), Math.round(r2.cy));
+        const vy1 = Math.max(Math.round(r1.cy), Math.round(r2.cy));
+        if (vy1 > vy0)
+          dungeon.addRoom(new Room({ x: wallA, y: vy0, w: 1, h: vy1 - vy0 + 1 }));
+        dungeon.addRoom(new Room({ x: wallA, y: Math.round(r2.cy), w: wallB - wallA, h: 1 }));
+      }
     }
   }
 }
