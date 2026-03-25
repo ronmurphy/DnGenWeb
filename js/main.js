@@ -4,9 +4,10 @@
  */
 import { Dungeon, DOOR_TYPE, ROOM_TYPE } from './dungeon/model.js';
 import { Renderer } from './dungeon/renderer.js';
-import { generator } from './dungeon/generator.js';
+import { generator, bspGenerator, classicGenerator } from './dungeon/generator.js';
 import { Editor } from './ui/editor.js';
 import { Style, ShadingConfig } from './dungeon/shading.js';
+import { exportAdventureText } from './dungeon/export.js';
 
 // ── Canvas setup ─────────────────────────────────────────────────────────────
 
@@ -65,9 +66,17 @@ setStatus('select'); // initial hint
 
 // ── Toolbar: generate ─────────────────────────────────────────────────────────
 
+const GENERATORS = {
+  organic: generator,
+  bsp:     bspGenerator,
+  classic: classicGenerator,
+};
+
 document.getElementById('btn-generate').addEventListener('click', () => {
-  const seed = parseInt(document.getElementById('input-seed').value, 10) || Date.now();
-  dungeon = generator.generate(seed, []);
+  const seed   = parseInt(document.getElementById('input-seed').value, 10) || Date.now();
+  const method = document.getElementById('sel-gen-method').value;
+  const gen    = GENERATORS[method] ?? generator;
+  dungeon = gen.generate(seed, []);
   editor.setDungeon(dungeon);
   document.getElementById('story-name').value = dungeon.name;
   document.getElementById('story-hook').value = dungeon.hook;
@@ -110,6 +119,35 @@ document.getElementById('btn-export-svg').addEventListener('click', () => {
   }, 'image/png');
 });
 
+// ── Export: Save Adventure (Markdown + PNG) ────────────────────────────────────
+
+document.getElementById('btn-save-adventure').addEventListener('click', () => {
+  const slug = (dungeon.name || 'dungeon').replace(/\s+/g, '_');
+
+  // Download Markdown text
+  const md   = exportAdventureText(dungeon);
+  const mdBlob = new Blob([md], { type: 'text/markdown' });
+  const mdUrl  = URL.createObjectURL(mdBlob);
+  const mdLink = document.createElement('a');
+  mdLink.download = slug + '.md';
+  mdLink.href = mdUrl;
+  mdLink.click();
+  URL.revokeObjectURL(mdUrl);
+
+  // Download map PNG (slight delay so browser handles both downloads)
+  setTimeout(() => {
+    const offscreen = renderer.renderExport(dungeon, 2);
+    offscreen.toBlob(blob => {
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = slug + '_map.png';
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, 150);
+});
+
 // ── Style controls ─────────────────────────────────────────────────────────────
 
 function syncStyle() {
@@ -129,6 +167,7 @@ function syncStyle() {
   renderer.showShadows = document.getElementById('chk-shadows').checked;
   renderer.showProps   = document.getElementById('chk-props').checked;
   renderer.mergeRooms  = document.getElementById('chk-merge').checked;
+  renderer.showLegend  = document.getElementById('chk-legend').checked;
 
   renderer.cellSize = parseInt(document.getElementById('cell-size').value, 10);
 
@@ -137,7 +176,7 @@ function syncStyle() {
 
 ['col-ink','col-paper','col-floor','col-shading',
  'stroke-thin','stroke-hatch','stroke-normal','stroke-thick',
- 'sel-hatching','sel-grid','chk-shadows','chk-props','chk-merge','cell-size']
+ 'sel-hatching','sel-grid','chk-shadows','chk-props','chk-merge','chk-legend','cell-size']
   .forEach(id => document.getElementById(id).addEventListener('input', syncStyle));
 
 // ── Story controls ─────────────────────────────────────────────────────────────
@@ -165,10 +204,12 @@ function showPropsRoom(room) {
   propsEmpty.style.display = 'none';
   propsRoom.style.display  = '';
   propsDoor.style.display  = 'none';
-  document.getElementById('prop-room-label').value = room.label ?? '';
-  document.getElementById('prop-room-type').value  = room.type  ?? 'normal';
-  document.getElementById('prop-room-water').checked = room.water ?? false;
-  document.getElementById('prop-room-notes').value = room.notes ?? '';
+  document.getElementById('prop-room-label').value    = room.label ?? '';
+  document.getElementById('prop-room-order').value    = room.order ?? '';
+  document.getElementById('prop-room-type').value     = room.type  ?? 'normal';
+  document.getElementById('prop-room-icon').value     = room.icon  ?? 'none';
+  document.getElementById('prop-room-water').checked  = room.water ?? false;
+  document.getElementById('prop-room-notes').value    = room.notes ?? '';
 }
 
 function showPropsDoor(door) {
@@ -190,8 +231,14 @@ window.addEventListener('dungeon:select', e => {
 document.getElementById('prop-room-label').addEventListener('input', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.label = e.target.value; render(); }
 });
+document.getElementById('prop-room-order').addEventListener('input', e => {
+  if (renderer.selectedRoom) { renderer.selectedRoom.order = e.target.value; }
+});
 document.getElementById('prop-room-type').addEventListener('change', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.type = e.target.value; render(); }
+});
+document.getElementById('prop-room-icon').addEventListener('change', e => {
+  if (renderer.selectedRoom) { renderer.selectedRoom.icon = e.target.value; render(); }
 });
 document.getElementById('prop-room-water').addEventListener('change', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.water = e.target.checked; render(); }
@@ -236,6 +283,7 @@ function _centerView() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 resizeCanvas();
+syncStyle(); // apply initial control values to renderer before first render
 
 // Generate a default dungeon on load
 dungeon = generator.generate(12345, []);

@@ -21,6 +21,28 @@ export const ROOM_TYPE = {
   TRAP:     'trap',
 };
 
+// ── Room icons ────────────────────────────────────────────────────────────────
+/** Map of icon key → { label, symbol } used by the renderer and legend. */
+export const ROOM_ICONS = {
+  none:     { label: 'None',        symbol: ''   },
+  entrance: { label: 'Entrance',    symbol: '▲'  },
+  exit:     { label: 'Exit',        symbol: '▼'  },
+  boss:     { label: 'Boss',        symbol: '☠'  },
+  treasure: { label: 'Treasure',    symbol: '★'  },
+  trap:     { label: 'Trap',        symbol: '⚠'  },
+  shrine:   { label: 'Shrine',      symbol: '✝'  },
+  arcane:   { label: 'Arcane',      symbol: '✦'  },
+  prison:   { label: 'Prison',      symbol: '⊠'  },
+  armory:   { label: 'Armory',      symbol: '⚔'  },
+  forge:    { label: 'Forge',       symbol: '⚒'  },
+  throne:   { label: 'Throne',      symbol: '♛'  },
+  crypt:    { label: 'Crypt',       symbol: '✠'  },
+  library:  { label: 'Library',     symbol: '≡'  },
+  tavern:   { label: 'Tavern',      symbol: '◆'  },
+  guard:    { label: 'Guard Post',  symbol: '⊕'  },
+  puzzle:   { label: 'Puzzle',      symbol: '?'  },
+};
+
 // ── Room ─────────────────────────────────────────────────────────────────────
 /**
  * A dungeon room in grid coordinates.
@@ -41,6 +63,8 @@ export class Room {
     this.notes   = '';
     this.water   = false;
     this.hidden  = false;
+    this.icon    = 'none';   // key into ROOM_ICONS; 'none' = use type default
+    this.order   = '';       // narrative order label: 'Entry', '1', '2', 'Boss', 'End', etc.
 
     this.doors   = [];   // Door references
   }
@@ -92,13 +116,14 @@ export class Room {
   toJSON() {
     return { id: this.id, x: this.x, y: this.y, w: this.w, h: this.h,
              round: this.round, type: this.type, label: this.label,
-             notes: this.notes, water: this.water };
+             notes: this.notes, water: this.water, icon: this.icon, order: this.order };
   }
 
   static fromJSON(d) {
     const r = new Room(d);
-    r.id = d.id;
-    r.type = d.type; r.label = d.label; r.notes = d.notes; r.water = d.water;
+    r.id    = d.id;
+    r.type  = d.type;  r.label = d.label; r.notes = d.notes;
+    r.water = d.water; r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
     return r;
   }
 }

@@ -112,12 +112,17 @@ aside {
 }
 
 /* ── Export button colours ── */
-#btn-export-png { border-color: var(--accent2); color: var(--accent2); }
-#btn-export-svg { border-color: #a6e3a1; color: #a6e3a1; }
-#btn-generate   { border-color: var(--accent); color: var(--accent); }
-#btn-clear      { border-color: var(--danger); color: var(--danger); }
-#btn-generate:hover { background: var(--accent); color: var(--bg-dark); }
-#btn-clear:hover    { background: var(--danger); color: var(--bg-dark); }
+#btn-export-png      { border-color: var(--accent2); color: var(--accent2); }
+#btn-export-svg      { border-color: #a6e3a1; color: #a6e3a1; }
+#btn-save-adventure  { border-color: #fab387; color: #fab387; }
+#btn-generate        { border-color: var(--accent); color: var(--accent); }
+#btn-clear           { border-color: var(--danger); color: var(--danger); }
+#btn-generate:hover       { background: var(--accent); color: var(--bg-dark); }
+#btn-clear:hover          { background: var(--danger); color: var(--bg-dark); }
+#btn-save-adventure:hover { background: #fab387; color: var(--bg-dark); }
+
+/* ── Gen method select ── */
+#toolbar select { background: var(--bg-light); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-size: 12px; cursor: pointer; }
 
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 6px; }

@@ -27,10 +27,18 @@
       </div>
       <div class="toolbar-group">
         <label>Seed <input id="input-seed" type="number" value="12345" min="1" max="999999999"></label>
+        <label>Method
+          <select id="sel-gen-method">
+            <option value="organic">Organic</option>
+            <option value="bsp">BSP</option>
+            <option value="classic">Rooms + Corridors</option>
+          </select>
+        </label>
       </div>
       <div class="toolbar-group">
         <button id="btn-export-png" title="Export as PNG">PNG</button>
         <button id="btn-export-svg" title="Export as SVG">SVG</button>
+        <button id="btn-save-adventure" title="Save adventure text + map">Save Adventure</button>
       </div>
     </header>
 
@@ -74,6 +82,7 @@
           <label><input type="checkbox" id="chk-shadows" checked> Shadows</label>
           <label><input type="checkbox" id="chk-props" checked> Props</label>
           <label><input type="checkbox" id="chk-merge"> Merge overlapping rooms</label>
+          <label><input type="checkbox" id="chk-legend" checked> Show legend</label>
         </section>
       </aside>
 
@@ -88,6 +97,7 @@
           <p id="props-empty">Select a room or door to edit its properties.</p>
           <div id="props-room" style="display:none">
             <label>Label <input type="text" id="prop-room-label" placeholder="Room name..."></label>
+            <label>Order <input type="text" id="prop-room-order" placeholder="Entry, 1, 2, Boss, End..."></label>
             <label>Type
               <select id="prop-room-type">
                 <option value="normal">Normal</option>
@@ -95,6 +105,27 @@
                 <option value="boss">Boss Room</option>
                 <option value="treasure">Treasure</option>
                 <option value="trap">Trap</option>
+              </select>
+            </label>
+            <label>Icon
+              <select id="prop-room-icon">
+                <option value="none">— None —</option>
+                <option value="entrance">▲ Entrance</option>
+                <option value="exit">▼ Exit</option>
+                <option value="boss">☠ Boss</option>
+                <option value="treasure">★ Treasure</option>
+                <option value="trap">⚠ Trap</option>
+                <option value="shrine">✝ Shrine</option>
+                <option value="arcane">✦ Arcane</option>
+                <option value="prison">⊠ Prison</option>
+                <option value="armory">⚔ Armory</option>
+                <option value="forge">⚒ Forge</option>
+                <option value="throne">♛ Throne</option>
+                <option value="crypt">✠ Crypt</option>
+                <option value="library">≡ Library</option>
+                <option value="tavern">◆ Tavern</option>
+                <option value="guard">⊕ Guard Post</option>
+                <option value="puzzle">? Puzzle</option>
               </select>
             </label>
             <label><input type="checkbox" id="prop-room-water"> Contains water</label>

@@ -13,7 +13,7 @@
  *   8. Selection highlight
  */
 import { Style, ShadingConfig, drawShading } from './shading.js';
-import { DOOR_TYPE, ROOM_TYPE } from './model.js';
+import { DOOR_TYPE, ROOM_TYPE, ROOM_ICONS } from './model.js';
 import { RNG } from '../utils/random.js';
 
 export class Renderer {
@@ -40,6 +40,7 @@ export class Renderer {
     this.showShadows  = true;
     this.showProps    = true;
     this.mergeRooms   = false;
+    this.showLegend   = true;
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -115,11 +116,11 @@ export class Renderer {
     // 6. Grid lines
     this._drawGridLines(ctx, dungeon, cs);
 
-    // 7. Doors
-    this._drawDoors(ctx, dungeon, cs);
-
-    // 8. Shadows (simple drop shadow under rooms)
+    // 7. Shadows — drawn before doors so doors always appear on top
     if (this.showShadows) this._drawShadows(ctx, dungeon, cs);
+
+    // 8. Doors
+    this._drawDoors(ctx, dungeon, cs);
 
     // 9. Room labels
     this._drawLabels(ctx, dungeon, cs);
@@ -132,6 +133,9 @@ export class Renderer {
     this._drawSelection(ctx, cs);
 
     ctx.restore();
+
+    // 12. Legend — drawn in screen space (not affected by pan/zoom)
+    if (this.showLegend) this._drawLegend(ctx, dungeon);
   }
 
   // ── Floor fills ─────────────────────────────────────────────────────────────
@@ -362,16 +366,16 @@ export class Renderer {
     const x0 = room.x * cs, y0 = room.y * cs;
     const x1 = (room.x + room.w) * cs, y1 = (room.y + room.h) * cs;
 
+    // setLineDash INSIDE save so restore() returns lineDash to its prior [] state
+    ctx.save();
+
     if (this.gridMode === 'dotted') {
       ctx.setLineDash([1, cs - 1]);
       ctx.lineDashOffset = 0;
     } else if (this.gridMode === 'dashed') {
       ctx.setLineDash([cs * 0.4, cs * 0.6]);
-    } else {
-      ctx.setLineDash([]);
     }
 
-    ctx.save();
     ctx.beginPath();
     this._roomPath(ctx, room, cs);
     ctx.clip();
@@ -388,7 +392,6 @@ export class Renderer {
       ctx.lineTo(x1, gy * cs);
       ctx.stroke();
     }
-    ctx.setLineDash([]);
     ctx.restore();
   }
 
@@ -444,6 +447,8 @@ export class Renderer {
   // ── Doors ──────────────────────────────────────────────────────────────────
 
   _drawDoors(ctx, dungeon, cs) {
+    ctx.setLineDash([]);   // clear any dash pattern left by grid/detail drawing
+    ctx.globalAlpha = 1;
     for (const door of dungeon.doors) {
       this._drawDoor(ctx, door, cs);
     }
@@ -573,33 +578,146 @@ export class Renderer {
 
   // ── Labels ─────────────────────────────────────────────────────────────────
 
+  // Fallback icon per room type when no explicit icon is set
+  static _TYPE_ICONS = {
+    entrance: 'entrance', boss: 'boss', treasure: 'treasure', trap: 'trap',
+  };
+
   _drawLabels(ctx, dungeon, cs) {
-    ctx.fillStyle   = Style.ink;
-    ctx.textAlign   = 'center';
+    ctx.fillStyle    = Style.ink;
+    ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.globalAlpha  = 0.75;
-
-    // Room type icons
-    const icons = {
-      entrance: '▲', boss: '☠', treasure: '✦', trap: '⚠', normal: '',
-    };
 
     for (const room of dungeon.rooms) {
       if (room.hidden) continue;
       const cx = room.cx * cs;
       const cy = room.cy * cs;
-      const fs  = Math.min(cs * 0.55, 14);
-
-      ctx.font = `${fs}px system-ui, sans-serif`;
 
       if (room.label) {
+        ctx.font = `${Math.min(cs * 0.55, 14)}px system-ui, sans-serif`;
         ctx.fillText(room.label, cx, cy);
-      } else if (room.type !== ROOM_TYPE.NORMAL) {
-        ctx.font = `${Math.min(cs * 0.7, 18)}px system-ui`;
-        ctx.fillText(icons[room.type] ?? '', cx, cy);
+        continue;
+      }
+
+      // Pick icon: explicit > type-derived > nothing
+      const iconKey = (room.icon && room.icon !== 'none')
+        ? room.icon
+        : (Renderer._TYPE_ICONS[room.type] ?? null);
+
+      if (iconKey) {
+        const sym = ROOM_ICONS[iconKey]?.symbol ?? '';
+        if (sym) {
+          ctx.font = `${Math.min(cs * 0.7, 18)}px system-ui`;
+          ctx.fillText(sym, cx, cy);
+        }
+      }
+
+      // Order label — top-left area of room.
+      // For round rooms the bounding-box corner is outside the circle, so we
+      // shift 25% in from each edge so the text lands inside the arc.
+      if (room.order) {
+        ctx.font = `bold ${Math.min(cs * 0.38, 11)}px system-ui, sans-serif`;
+        ctx.textAlign = 'left';
+        const ox = room.round
+          ? (room.x + room.w * 0.25) * cs
+          : room.x * cs + 3;
+        const oy = room.round
+          ? (room.y + room.h * 0.25) * cs
+          : room.y * cs + cs * 0.38;
+        ctx.fillText(room.order, ox, oy);
+        ctx.textAlign = 'center';
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ── Legend ─────────────────────────────────────────────────────────────────
+
+  _drawLegend(ctx, dungeon) {
+    const usedIcons = new Map(); // key → { label, symbol }
+    const usedDoors = new Map(); // type → label
+
+    const doorLabels = {
+      open: 'Open Archway', door: 'Door', locked: 'Locked Door',
+      secret: 'Secret Door', portcullis: 'Portcullis',
+    };
+    const doorSymbols = {
+      open: 'O', door: '▭', locked: '⊡', secret: 'S', portcullis: '≡',
+    };
+
+    for (const room of dungeon.rooms) {
+      if (room.hidden) continue;
+      const iconKey = (room.icon && room.icon !== 'none')
+        ? room.icon
+        : (Renderer._TYPE_ICONS[room.type] ?? null);
+      if (iconKey && ROOM_ICONS[iconKey]?.symbol) {
+        usedIcons.set(iconKey, ROOM_ICONS[iconKey]);
+      }
+    }
+    for (const door of dungeon.doors) {
+      if (!usedDoors.has(door.type)) {
+        usedDoors.set(door.type, { label: doorLabels[door.type] ?? door.type, symbol: doorSymbols[door.type] ?? '?' });
+      }
+    }
+
+    if (usedIcons.size === 0 && usedDoors.size === 0) return;
+
+    const items = [];
+    for (const [, info] of usedIcons) items.push({ symbol: info.symbol, label: info.label });
+    for (const [, info] of usedDoors) items.push({ symbol: info.symbol, label: info.label });
+
+    const pad    = 8;
+    const lh     = 16;
+    const fs     = 11;
+    const symW   = 18;
+    const boxW   = 130;
+    const boxH   = pad * 2 + lh + items.length * lh;
+    const bx     = 10;
+    const by     = 10;
+
+    // Background
+    ctx.save();
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle   = Style.paper;
+    ctx.strokeStyle = Style.ink;
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, boxW, boxH, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Title
+    ctx.fillStyle    = Style.ink;
+    ctx.font         = `bold ${fs}px system-ui, sans-serif`;
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Legend', bx + pad, by + pad + lh / 2);
+
+    // Divider
+    ctx.beginPath();
+    ctx.moveTo(bx + pad, by + pad + lh + 2);
+    ctx.lineTo(bx + boxW - pad, by + pad + lh + 2);
+    ctx.strokeStyle = Style.ink;
+    ctx.globalAlpha = 0.3;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Items
+    ctx.font = `${fs}px system-ui, sans-serif`;
+    items.forEach((item, i) => {
+      const iy = by + pad + lh + lh * (i + 0.5) + 4;
+      ctx.fillStyle    = Style.ink;
+      ctx.textAlign    = 'center';
+      ctx.font         = `bold ${fs}px system-ui, sans-serif`;
+      ctx.fillText(item.symbol, bx + pad + symW / 2, iy);
+      ctx.textAlign    = 'left';
+      ctx.font         = `${fs}px system-ui, sans-serif`;
+      ctx.fillText(item.label, bx + pad + symW + 2, iy);
+    });
+
+    ctx.restore();
   }
 
   // ── Ghost preview ──────────────────────────────────────────────────────────

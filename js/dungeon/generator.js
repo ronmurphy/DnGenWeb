@@ -212,22 +212,36 @@ export class Generator {
     if (dungeon.rooms.length === 0) return;
 
     // Entrance = first room
-    dungeon.rooms[0].type = ROOM_TYPE.ENTRANCE;
+    dungeon.rooms[0].type  = ROOM_TYPE.ENTRANCE;
+    dungeon.rooms[0].icon  = 'entrance';
+    dungeon.rooms[0].order = 'Entry';
 
     // Boss = room furthest from entrance (by index, simple heuristic)
     const last = dungeon.rooms[dungeon.rooms.length - 1];
-    last.type = ROOM_TYPE.BOSS;
+    last.type  = ROOM_TYPE.BOSS;
+    last.icon  = 'boss';
+    last.order = 'Boss';
 
     // Treasure: a random medium room
     const candidates = dungeon.rooms.slice(1, -1).filter(r => r.w >= 3 && r.h >= 3);
     if (candidates.length) {
-      this.rng.pick(candidates).type = ROOM_TYPE.TREASURE;
+      const t = this.rng.pick(candidates);
+      t.type = ROOM_TYPE.TREASURE;
+      t.icon = 'treasure';
     }
 
     // Trap: another random room
     const trapCandidates = dungeon.rooms.slice(1, -1).filter(r => r.type === ROOM_TYPE.NORMAL);
     if (trapCandidates.length) {
-      this.rng.pick(trapCandidates).type = ROOM_TYPE.TRAP;
+      const t = this.rng.pick(trapCandidates);
+      t.type = ROOM_TYPE.TRAP;
+      t.icon = 'trap';
+    }
+
+    // Number the remaining normal rooms
+    let n = 1;
+    for (const r of dungeon.rooms) {
+      if (!r.order) r.order = String(n++);
     }
   }
 
@@ -254,3 +268,270 @@ export class Generator {
 }
 
 export const generator = new Generator();
+
+// ── Shared story helpers ───────────────────────────────────────────────────
+
+function generateName(rng) {
+  const adj  = ['Sunken','Forsaken','Blighted','Ancient','Cursed','Forgotten','Shadowed','Ruined','Crumbling','Infernal'];
+  const noun = ['Crypt','Vault','Lair','Sanctum','Citadel','Depths','Catacomb','Dungeon','Fortress','Tomb'];
+  const of   = ['the Dragon','the Dead','Shadow','Eternal Night','the Betrayer','Despair','Lost Souls','the Broken Crown'];
+  return `${rng.pick(adj)} ${rng.pick(noun)} of ${rng.pick(of)}`;
+}
+
+function generateHook(rng, name) {
+  const hooks = [
+    `A dying adventurer spoke of untold riches within ${name}.`,
+    `The village elder pleads for the return of a stolen relic from ${name}.`,
+    `Strange lights have been seen near the entrance to ${name}.`,
+    `A bounty has been placed on the head of the creature that lurks in ${name}.`,
+    `An old map reveals a secret passage into ${name}.`,
+    `The nightmares of the townsfolk all lead to ${name}.`,
+  ];
+  return rng.pick(hooks);
+}
+
+function assignSpecials(dungeon, rng) {
+  if (!dungeon.rooms.length) return;
+  dungeon.rooms[0].type  = ROOM_TYPE.ENTRANCE;
+  dungeon.rooms[0].icon  = 'entrance';
+  dungeon.rooms[0].order = 'Entry';
+
+  const last = dungeon.rooms[dungeon.rooms.length - 1];
+  last.type  = ROOM_TYPE.BOSS;
+  last.icon  = 'boss';
+  last.order = 'Boss';
+
+  const candidates = dungeon.rooms.slice(1, -1).filter(r => r.w >= 3 && r.h >= 3);
+  if (candidates.length) {
+    const t = rng.pick(candidates);
+    t.type = ROOM_TYPE.TREASURE; t.icon = 'treasure';
+  }
+  const trapCandidates = dungeon.rooms.slice(1, -1).filter(r => r.type === ROOM_TYPE.NORMAL);
+  if (trapCandidates.length) {
+    const t = rng.pick(trapCandidates);
+    t.type = ROOM_TYPE.TRAP; t.icon = 'trap';
+  }
+  let n = 1;
+  for (const r of dungeon.rooms) { if (!r.order) r.order = String(n++); }
+}
+
+function randomDoorType(rng) {
+  return rng.weighted(
+    [DOOR_TYPE.OPEN, DOOR_TYPE.DOOR, DOOR_TYPE.LOCKED, DOOR_TYPE.SECRET, DOOR_TYPE.PORTCULLIS],
+    [0.15, 0.5, 0.15, 0.1, 0.1]
+  );
+}
+
+// ── BSP Generator ─────────────────────────────────────────────────────────────
+//
+// Builds a binary-space-partition tree, places one room per leaf, then
+// walks back up the tree to connect sibling subtrees with L-shaped corridors.
+// Corridors are added as 1-unit-wide rooms (use Merge mode to see them merged).
+// No live-array mutation during iteration — the old implementation caused an
+// infinite loop by growing dungeon.rooms while iterating over it.
+
+export class BSPGenerator {
+  generate(seed, tags = []) {
+    this.rng = new RNG(seed);
+
+    let space = 44, maxDepth = 3;
+    if (tags.includes('small')) { space = 28; maxDepth = 2; }
+    if (tags.includes('large')) { space = 60; maxDepth = 4; }
+
+    const dungeon = new Dungeon(seed);
+    const tree    = this._buildTree({ x: 0, y: 0, w: space, h: space }, 0, maxDepth);
+    this._collectTree(tree, dungeon);
+
+    assignSpecials(dungeon, this.rng);
+    dungeon.name = generateName(this.rng);
+    dungeon.hook = generateHook(this.rng, dungeon.name);
+    return dungeon;
+  }
+
+  /** Recursively split the node; returns a tree where leaves have .room set. */
+  _buildTree(node, depth, maxDepth) {
+    if (depth >= maxDepth || node.w < 12 || node.h < 12) {
+      node.leaf = true;
+      node.room = this._roomInPartition(node);
+      return node;
+    }
+
+    const splitH = node.h > node.w || (node.w === node.h && this.rng.next() > 0.5);
+    const s = splitH
+      ? Math.floor(this.rng.float(0.4, 0.6) * node.h)
+      : Math.floor(this.rng.float(0.4, 0.6) * node.w);
+
+    const minSplit = 6;
+    const dim = splitH ? node.h : node.w;
+    if (s < minSplit || dim - s < minSplit) {
+      node.leaf = true;
+      node.room = this._roomInPartition(node);
+      return node;
+    }
+
+    if (splitH) {
+      node.left  = this._buildTree({ x: node.x, y: node.y,     w: node.w, h: s         }, depth + 1, maxDepth);
+      node.right = this._buildTree({ x: node.x, y: node.y + s, w: node.w, h: node.h - s }, depth + 1, maxDepth);
+    } else {
+      node.left  = this._buildTree({ x: node.x,     y: node.y, w: s,         h: node.h }, depth + 1, maxDepth);
+      node.right = this._buildTree({ x: node.x + s, y: node.y, w: node.w - s, h: node.h }, depth + 1, maxDepth);
+    }
+    return node;
+  }
+
+  /** Return a representative room from this subtree (nearest to centre). */
+  _repRoom(node) {
+    if (node.leaf) return node.room ?? null;
+    return this._repRoom(node.left) ?? this._repRoom(node.right);
+  }
+
+  /** Walk tree, add rooms and connecting corridors to dungeon. */
+  _collectTree(node, dungeon) {
+    if (node.leaf) {
+      if (node.room) dungeon.addRoom(node.room);
+      return;
+    }
+    this._collectTree(node.left,  dungeon);
+    this._collectTree(node.right, dungeon);
+
+    const r1 = this._repRoom(node.left);
+    const r2 = this._repRoom(node.right);
+    if (r1 && r2) this._connectRooms(dungeon, r1, r2);
+  }
+
+  _roomInPartition(part) {
+    const margin = 2;
+    const maxW = part.w - margin * 2;
+    const maxH = part.h - margin * 2;
+    if (maxW < 3 || maxH < 3) return null;
+    const w = this.rng.int(Math.max(3, maxW - 4), maxW);
+    const h = this.rng.int(Math.max(3, maxH - 4), maxH);
+    const x = part.x + margin + this.rng.int(0, Math.max(0, maxW - w));
+    const y = part.y + margin + this.rng.int(0, Math.max(0, maxH - h));
+    const round = w === h && this.rng.next() < 0.2;
+    return new Room({ x, y, w: round ? Math.min(w, h) : w, h: round ? Math.min(w, h) : h, round });
+  }
+
+  /** L-shaped corridor clipped to room walls — never overlaps the source/dest rooms. */
+  _connectRooms(dungeon, a, b) {
+    const ay = Math.round(a.cy), ax = Math.round(a.cx);
+    const by = Math.round(b.cy), bx = Math.round(b.cx);
+
+    if (this.rng.next() > 0.5) {
+      // H-first: horizontal at ay from A's wall → B's wall, then V down to B if needed
+      const aWx = bx >= ax ? a.x + a.w : a.x;
+      const bWx = bx >= ax ? b.x       : b.x + b.w;
+      const hLen = Math.abs(bWx - aWx);
+      if (hLen > 0)
+        dungeon.addRoom(new Room({ x: Math.min(aWx, bWx), y: ay, w: hLen, h: 1 }));
+      // V jog at bWx if ay is outside B's y range
+      if (ay < b.y)
+        dungeon.addRoom(new Room({ x: bWx, y: ay,       w: 1, h: b.y - ay }));
+      else if (ay > b.y + b.h)
+        dungeon.addRoom(new Room({ x: bWx, y: b.y + b.h, w: 1, h: ay - b.y - b.h }));
+
+    } else {
+      // V-first: vertical at ax from A's wall → B's wall, then H across to B if needed
+      const aWy = by >= ay ? a.y + a.h : a.y;
+      const bWy = by >= ay ? b.y       : b.y + b.h;
+      const vLen = Math.abs(bWy - aWy);
+      if (vLen > 0)
+        dungeon.addRoom(new Room({ x: ax, y: Math.min(aWy, bWy), w: 1, h: vLen }));
+      // H jog at bWy if ax is outside B's x range
+      if (ax < b.x)
+        dungeon.addRoom(new Room({ x: ax,       y: bWy, w: b.x - ax,       h: 1 }));
+      else if (ax > b.x + b.w)
+        dungeon.addRoom(new Room({ x: b.x + b.w, y: bWy, w: ax - b.x - b.w, h: 1 }));
+    }
+  }
+}
+
+export const bspGenerator = new BSPGenerator();
+
+// ── Classic (Rooms + Corridors) Generator ────────────────────────────────────
+
+export class ClassicGenerator {
+  generate(seed, tags = []) {
+    this.rng = new RNG(seed);
+
+    let cols = 4, rows = 3, minSz = 3, maxSz = 8, spacing = 14;
+    if (tags.includes('small'))  { cols = 3; rows = 2; minSz = 2; maxSz = 5;  spacing = 10; }
+    if (tags.includes('large'))  { cols = 5; rows = 4; minSz = 4; maxSz = 10; spacing = 18; }
+
+    const dungeon = new Dungeon(seed);
+
+    // Place rooms on a grid of cells
+    const placed = [];
+    for (let col = 0; col < cols; col++) {
+      for (let row = 0; row < rows; row++) {
+        if (this.rng.next() < 0.15) continue; // occasionally skip a cell
+        const w = this.rng.int(minSz, maxSz);
+        const h = this.rng.int(minSz, maxSz);
+        const bx = col * spacing;
+        const by = row * spacing;
+        const x  = bx + Math.floor((spacing - w) / 2);
+        const y  = by + Math.floor((spacing - h) / 2);
+        const round = w === h && this.rng.next() < 0.18;
+        const room = new Room({ x, y, w: round ? Math.min(w,h) : w, h: round ? Math.min(w,h) : h, round });
+        dungeon.addRoom(room);
+        placed.push({ room, col, row });
+      }
+    }
+
+    if (!dungeon.rooms.length) {
+      // Fallback: place a single room
+      dungeon.addRoom(new Room({ x: 0, y: 0, w: 6, h: 6 }));
+    }
+
+    // Connect horizontally and vertically adjacent cells
+    const index = new Map(placed.map(p => [`${p.col},${p.row}`, p.room]));
+    for (const { room, col, row } of placed) {
+      // Right neighbour
+      const right = index.get(`${col + 1},${row}`);
+      if (right) this._corridor(dungeon, room, right, 'h');
+      // Down neighbour
+      const down  = index.get(`${col},${row + 1}`);
+      if (down)  this._corridor(dungeon, room, down,  'v');
+    }
+
+    assignSpecials(dungeon, this.rng);
+    dungeon.name = generateName(this.rng);
+    dungeon.hook = generateHook(this.rng, dungeon.name);
+    return dungeon;
+  }
+
+  // Corridor clipped to room walls — never overlaps either room.
+  _corridor(dungeon, a, b, axis) {
+    const ax = Math.round(a.cx), ay = Math.round(a.cy);
+    const bx = Math.round(b.cx), by = Math.round(b.cy);
+
+    if (axis === 'h') {
+      // Horizontal: from A's right wall to B's left wall at y=ay
+      const aWx = bx >= ax ? a.x + a.w : a.x;
+      const bWx = bx >= ax ? b.x       : b.x + b.w;
+      const hLen = Math.abs(bWx - aWx);
+      if (hLen > 0)
+        dungeon.addRoom(new Room({ x: Math.min(aWx, bWx), y: ay, w: hLen, h: 1 }));
+      // V jog at bWx if ay is outside B's y range
+      if (ay < b.y)
+        dungeon.addRoom(new Room({ x: bWx, y: ay,        w: 1, h: b.y - ay }));
+      else if (ay > b.y + b.h)
+        dungeon.addRoom(new Room({ x: bWx, y: b.y + b.h, w: 1, h: ay - b.y - b.h }));
+
+    } else {
+      // Vertical: from A's bottom wall to B's top wall at x=ax
+      const aWy = by >= ay ? a.y + a.h : a.y;
+      const bWy = by >= ay ? b.y       : b.y + b.h;
+      const vLen = Math.abs(bWy - aWy);
+      if (vLen > 0)
+        dungeon.addRoom(new Room({ x: ax, y: Math.min(aWy, bWy), w: 1, h: vLen }));
+      // H jog at bWy if ax is outside B's x range
+      if (ax < b.x)
+        dungeon.addRoom(new Room({ x: ax,        y: bWy, w: b.x - ax,        h: 1 }));
+      else if (ax > b.x + b.w)
+        dungeon.addRoom(new Room({ x: b.x + b.w, y: bWy, w: ax - b.x - b.w,  h: 1 }));
+    }
+  }
+}
+
+export const classicGenerator = new ClassicGenerator();
