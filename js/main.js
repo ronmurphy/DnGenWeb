@@ -79,6 +79,7 @@ let dungeon    = new Dungeon(12345);
 // Initial pan: center of canvas
 renderer.panX = 10;
 renderer.panY = 10;
+renderer.showResizeHandles = false;
 
 const editor = new Editor(canvas, renderer, dungeon, render);
 editor.onChanged = pushHistory;
@@ -171,6 +172,7 @@ document.querySelectorAll('#tool-rail .tool-btn').forEach(btn => {
     document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     editor.setTool(btn.dataset.tool);
+    renderer.showResizeHandles = (btn.dataset.tool === 'resize');
     setStatus(btn.dataset.tool);
   });
 });
@@ -179,13 +181,14 @@ setStatus('select');
 // Keyboard shortcuts for tools
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const keyMap = { v: 'select', r: 'room', c: 'round-room', p: 'polygon', d: 'door', e: 'erase' };
+  const keyMap = { v: 'select', r: 'room', c: 'round-room', p: 'polygon', d: 'door', e: 'erase', x: 'resize' };
   const tool = keyMap[e.key.toLowerCase()];
   if (tool) {
     document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`#tool-rail .tool-btn[data-tool="${tool}"]`);
     if (btn) btn.classList.add('active');
     editor.setTool(tool);
+    renderer.showResizeHandles = (tool === 'resize');
     setStatus(tool);
   }
 });
@@ -388,10 +391,12 @@ if (resizeBtn) {
     resizeBtn.setAttribute('data-checked', on ? 'true' : 'false');
     if (on) {
       editor.setTool('resize');
+      renderer.showResizeHandles = true;
       document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
       setStatus('resize');
     } else {
       editor.setTool('select');
+      renderer.showResizeHandles = false;
       const selectBtn = document.querySelector('#tool-rail .tool-btn[data-tool="select"]');
       if (selectBtn) selectBtn.classList.add('active');
       setStatus('select');

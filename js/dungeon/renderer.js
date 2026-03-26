@@ -43,6 +43,7 @@ export class Renderer {
     this.mergeRooms   = false;
     this.showLegend   = true;
     this.showGraphPaper = false;
+    this.showResizeHandles = false;
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -976,6 +977,57 @@ export class Renderer {
     this._roomPath(ctx, room, cs, 4 / this.zoom);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
+
+    if (this.showResizeHandles) {
+      this._drawResizeHandles(ctx, cs, room);
+    }
+  }
+
+  _drawResizeHandles(ctx, cs, room) {
+    const handleRadius = Math.max(3, 0.08 * cs);
+    const drawDot = (x, y) => {
+      ctx.beginPath();
+      ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    };
+
+    ctx.save();
+    ctx.fillStyle = '#f8f8ff';
+    ctx.strokeStyle = '#4c4c82';
+    ctx.lineWidth = 1;
+
+    if (room.points && room.points.length >= 3) {
+      for (const p of room.points) {
+        drawDot(p.x * cs, p.y * cs);
+      }
+    } else if (room.round) {
+      const cx = room.cx * cs;
+      const cy = room.cy * cs;
+      const r = (room.w / 2) * cs;
+      drawDot(cx + r, cy);
+      drawDot(cx - r, cy);
+      drawDot(cx, cy + r);
+      drawDot(cx, cy - r);
+    } else {
+      const x0 = room.x * cs;
+      const y0 = room.y * cs;
+      const x1 = (room.x + room.w) * cs;
+      const y1 = (room.y + room.h) * cs;
+      const cx = (x0 + x1) / 2;
+      const cy = (y0 + y1) / 2;
+
+      drawDot(x0, y0);
+      drawDot(x1, y0);
+      drawDot(x0, y1);
+      drawDot(x1, y1);
+      drawDot(cx, y0);
+      drawDot(cx, y1);
+      drawDot(x0, cy);
+      drawDot(x1, cy);
+    }
+
     ctx.restore();
   }
 
