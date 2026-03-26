@@ -28,10 +28,12 @@ export class Editor {
     this._panStart   = null;  // { mx, my, panX, panY }
 
     // Move-room drag state
-    this._movingRoom    = false;
-    this._moveRoomStart = null; // { x, y } original room position before drag
-    this._moveDragStart = null; // { x, y } snapped grid at drag start
-
+    this._movingRoom      = false;
+    this._moveRoomStart   = null; // { x, y } original room position before drag
+    this._moveRoomPoints  = null; // polygon points snapshot for move
+    this._moveDragStart   = null; // { x, y } snapped grid at drag start
+    // Polygon tool state
+    this._polygonPoints = [];
     this._bindEvents();
   }
 
@@ -46,6 +48,8 @@ export class Editor {
     this.tool = tool;
     this.renderer.ghostRoom = null;
     this.renderer.ghostDoor = null;
+    this.renderer.ghostPolygon = null;
+    this._polygonPoints = [];
     this.canvas.parentElement.className = `tool-${tool}`;
   }
 
@@ -101,6 +105,22 @@ export class Editor {
 
     if (e.button !== 0) return;
 
+    if (this.tool === 'polygon') {
+      const snap = this._snapToGrid(mx, my);
+      if (this._polygonPoints.length >= 3 && this._pointNear(snap, this._polygonPoints[0], 0.5)) {
+        this._finishPolygon();
+      } else {
+        // Avoid duplicated consecutive points
+        const last = this._polygonPoints[this._polygonPoints.length - 1];
+        if (!last || last.x !== snap.x || last.y !== snap.y) {
+          this._polygonPoints.push(snap);
+        }
+        this.renderer.ghostPolygon = [...this._polygonPoints];
+        this.onUpdate();
+      }
+      return;
+    }
+
     const snap = this._snapToGrid(mx, my);
     this._dragging  = true;
     this._dragStart = snap;
@@ -114,6 +134,11 @@ export class Editor {
           this._movingRoom    = true;
           this._moveRoomStart = { x: clicked.x, y: clicked.y };
           this._moveDragStart = snap;
+          if (clicked.points && clicked.points.length > 0) {
+            this._moveRoomPoints = clicked.points.map(p => ({ x: p.x, y: p.y }));
+          } else {
+            this._moveRoomPoints = null;
+          }
         } else {
           this._selectAt(mx, my);
         }
@@ -141,13 +166,38 @@ export class Editor {
       const snap = this._snapToGrid(mx, my);
       const dx = snap.x - this._moveDragStart.x;
       const dy = snap.y - this._moveDragStart.y;
-      this.renderer.selectedRoom.x = this._moveRoomStart.x + dx;
-      this.renderer.selectedRoom.y = this._moveRoomStart.y + dy;
+
+      const room = this.renderer.selectedRoom;
+      if (room.points && this._moveRoomPoints) {
+        room.points = this._moveRoomPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+        // keep bounding values in sync
+        room.x = room.bounds.x;
+        room.y = room.bounds.y;
+        room.w = room.bounds.w;
+        room.h = room.bounds.h;
+      } else {
+        room.x = this._moveRoomStart.x + dx;
+        room.y = this._moveRoomStart.y + dy;
+      }
+
       this.onUpdate();
       return;
     }
 
     if (!this._dragging) {
+      if (this.tool === 'polygon') {
+        if (this._polygonPoints.length > 0) {
+          const g = this._snapToGrid(mx, my);
+          this.renderer.ghostPolygon = [...this._polygonPoints, g];
+        } else {
+          this.renderer.ghostPolygon = null;
+        }
+        this.renderer.ghostRoom = null;
+        this.renderer.ghostDoor = null;
+        this.onUpdate();
+        return;
+      }
+
       if (this.tool === 'room' || this.tool === 'round-room') {
         const snap = this._snapToGrid(mx, my);
         this.renderer.ghostRoom = new Room({
@@ -189,12 +239,18 @@ export class Editor {
     if (this._movingRoom) {
       this._movingRoom = false;
       this._dragging   = false;
+      this._moveRoomPoints = null;
       this.onChanged?.();
       return;
     }
 
     if (!this._dragging) return;
     this._dragging = false;
+
+    if (this.tool === 'polygon') {
+      // polygon is handled on-mousedown, not drag end
+      return;
+    }
 
     const { mx, my } = this._eventPos(e);
     const snap = this._snapToGrid(mx, my);
@@ -247,6 +303,7 @@ export class Editor {
   _onMouseLeave() {
     this._movingRoom = false;
     this.renderer.ghostRoom = null;
+    this.renderer.ghostPolygon = null;
     this.onUpdate();
   }
 
@@ -419,6 +476,38 @@ export class Editor {
     this.onChanged?.();
   }
 
+  _pointNear(a, b, dist = 0.5) {
+    if (!a || !b) return false;
+    return Math.hypot(a.x - b.x, a.y - b.y) <= dist;
+  }
+
+  _finishPolygon() {
+    if (this._polygonPoints.length < 3) return;
+    const points = [...this._polygonPoints];
+
+    // Compute bounding box for the room object
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    const x0 = Math.min(...xs);
+    const y0 = Math.min(...ys);
+    const x1 = Math.max(...xs);
+    const y1 = Math.max(...ys);
+
+    const room = new Room({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    room.round = false;
+    room.points = points;
+
+    this.dungeon.addRoom(room);
+    this.renderer.selectedRoom = room;
+    this.renderer.selectedDoor = null;
+    this.renderer.ghostPolygon = null;
+    this._polygonPoints = [];
+
+    this.onUpdate();
+    this._emitSelection(room, null);
+    this.onChanged?.();
+  }
+
   // ── Door wall finder ───────────────────────────────────────────────────────
 
   /**
@@ -468,6 +557,7 @@ export class Editor {
       case 'v': this.setTool('select');     break;
       case 'r': this.setTool('room');       break;
       case 'c': this.setTool('round-room'); break;
+      case 'p': this.setTool('polygon');    break;
       case 'd': this.setTool('door');       break;
       case 'e': this.setTool('erase');      break;
       case 'delete':
@@ -490,6 +580,8 @@ export class Editor {
         this.renderer.selectedRoom = null;
         this.renderer.selectedDoor = null;
         this.renderer.ghostRoom    = null;
+        this.renderer.ghostPolygon = null;
+        this._polygonPoints = [];
         this.onUpdate();
         this._emitSelection(null, null);
         break;

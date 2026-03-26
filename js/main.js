@@ -92,11 +92,12 @@ function render() {
 
 const statusBar = document.getElementById('status-bar');
 const TOOL_HINTS = {
-  select:     'Select (V) — click a room or door to edit its properties. Double-click a door to cycle door type. Delete/Backspace removes it.',
-  room:       'Draw Room (R) — click and drag to size a rectangular room.',
+  select:      'Select (V) — click a room or door to edit its properties. Double-click a door to cycle door type. Delete/Backspace removes it.',
+  room:        'Draw Room (R) — click and drag to size a rectangular room.',
   'round-room': 'Draw Round Room (C) — click and drag to size a circular room.',
-  door:       'Place Door (D) — move near a shared wall between two adjacent rooms; a blue preview appears. Click to place.',
-  erase:      'Erase (E) — click a room or door to delete it.',
+  polygon:     'Draw Polygon Room (P) — click points to define a polygon, click start point to close.',
+  door:        'Place Door (D) — move near a shared wall between two adjacent rooms; a blue preview appears. Click to place.',
+  erase:       'Erase (E) — click a room or door to delete it.',
 };
 function setStatus(tool) {
   statusBar.textContent = TOOL_HINTS[tool] ?? '';

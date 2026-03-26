@@ -36,6 +36,7 @@ export class Renderer {
     this.selectedDoor = null;
     this.ghostRoom    = null;  // preview while drawing a room
     this.ghostDoor    = null;  // preview while hovering in door mode
+    this.ghostPolygon = null;  // preview while drawing a polygon room
     this.gridMode     = 'dotted';
     this.showShadows  = true;
     this.showProps    = true;
@@ -124,6 +125,11 @@ export class Renderer {
 
     // 8. Doors
     this._drawDoors(ctx, dungeon, cs);
+
+    // 8b. Polygon preview
+    if (this.ghostPolygon && this.ghostPolygon.length >= 2) {
+      this._drawGhostPolygon(ctx, cs);
+    }
 
     // 9. Room labels
     this._drawLabels(ctx, dungeon, cs);
@@ -225,7 +231,18 @@ export class Renderer {
     const floor = new Set();
     for (const room of dungeon.rooms) {
       if (room.hidden) continue;
-      if (room.round) {
+      if (room.points && room.points.length >= 3) {
+        const b = room.bounds;
+        const x0 = Math.floor(b.x);
+        const y0 = Math.floor(b.y);
+        const x1 = Math.ceil(b.x + b.w);
+        const y1 = Math.ceil(b.y + b.h);
+        for (let gx = x0; gx < x1; gx++) {
+          for (let gy = y0; gy < y1; gy++) {
+            if (room.contains(gx + 0.5, gy + 0.5)) floor.add(`${gx},${gy}`);
+          }
+        }
+      } else if (room.round) {
         const cx = room.cx, cy = room.cy, r = room.w / 2, r2 = r * r;
         const x0 = Math.floor(room.x), y0 = Math.floor(room.y);
         const x1 = Math.ceil(room.x + room.w), y1 = Math.ceil(room.y + room.h);
@@ -672,7 +689,30 @@ export class Renderer {
       ctx.setLineDash([]);
     }
   }
+  _drawGhostPolygon(ctx, cs) {
+    const pts = this.ghostPolygon;
+    if (!pts || pts.length < 2) return;
 
+    ctx.save();
+    ctx.strokeStyle = '#89b4fa';
+    ctx.fillStyle = 'rgba(137, 180, 250, 0.15)';
+    ctx.lineWidth = 2 / this.zoom;
+    ctx.setLineDash([6 / this.zoom, 4 / this.zoom]);
+
+    ctx.beginPath();
+    const p0 = pts[0];
+    ctx.moveTo(p0.x * cs, p0.y * cs);
+    pts.slice(1).forEach(p => ctx.lineTo(p.x * cs, p.y * cs));
+
+    // close when more than 2 points
+    if (pts.length > 2) {
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  }
   // ── Shadows ────────────────────────────────────────────────────────────────
 
   _drawShadows(ctx, dungeon, cs) {
@@ -906,6 +946,17 @@ export class Renderer {
 
   /** Build a canvas path for a room (round or rect), with optional extra inset. */
   _roomPath(ctx, room, cs, inflate = 0) {
+    if (room.points && room.points.length >= 3) {
+      const pts = room.points;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x * cs, pts[0].y * cs);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x * cs, pts[i].y * cs);
+      }
+      ctx.closePath();
+      return;
+    }
+
     if (room.round) {
       ctx.arc(room.cx * cs, room.cy * cs, (room.w / 2) * cs + inflate, 0, Math.PI * 2);
     } else {

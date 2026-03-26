@@ -50,13 +50,14 @@ export const ROOM_ICONS = {
  * Round rooms:       cx, cy stored in x, y; w=h=diameter
  */
 export class Room {
-  constructor({ x = 0, y = 0, w = 4, h = 4, round = false } = {}) {
+  constructor({ x = 0, y = 0, w = 4, h = 4, round = false, points = null } = {}) {
     this.id    = uid();
     this.x     = x;
     this.y     = y;
     this.w     = w;
     this.h     = h;
     this.round = round;
+    this.points = points;
 
     this.type    = ROOM_TYPE.NORMAL;
     this.label   = '';
@@ -69,11 +70,34 @@ export class Room {
     this.doors   = [];   // Door references
   }
 
-  get cx() { return this.x + this.w / 2; }
-  get cy() { return this.y + this.h / 2; }
+  get cx() {
+    if (this.points && this.points.length > 0) {
+      const xs = this.points.map(p => p.x);
+      return (Math.min(...xs) + Math.max(...xs)) / 2;
+    }
+    return this.x + this.w / 2;
+  }
+  get cy() {
+    if (this.points && this.points.length > 0) {
+      const ys = this.points.map(p => p.y);
+      return (Math.min(...ys) + Math.max(...ys)) / 2;
+    }
+    return this.y + this.h / 2;
+  }
 
   /** Axis-aligned bounding box in grid units. */
-  get bounds() { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
+  get bounds() {
+    if (this.points && this.points.length > 0) {
+      const xs = this.points.map(p => p.x);
+      const ys = this.points.map(p => p.y);
+      const x0 = Math.min(...xs);
+      const y0 = Math.min(...ys);
+      const x1 = Math.max(...xs);
+      const y1 = Math.max(...ys);
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    return { x: this.x, y: this.y, w: this.w, h: this.h };
+  }
 
   /** Inflated/deflated copy (grid units). */
   inflate(dx, dy = dx) {
@@ -86,6 +110,19 @@ export class Room {
 
   /** True if grid point (gx, gy) is inside this room. */
   contains(gx, gy) {
+    if (this.points && this.points.length >= 3) {
+      // Ray-casting point-in-polygon
+      let inside = false;
+      for (let i = 0, j = this.points.length - 1; i < this.points.length; j = i++) {
+        const xi = this.points[i].x, yi = this.points[i].y;
+        const xj = this.points[j].x, yj = this.points[j].y;
+
+        const intersect = ((yi > gy) !== (yj > gy)) &&
+          (gx < ((xj - xi) * (gy - yi)) / (yj - yi + Number.EPSILON) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
     if (this.round) {
       const rx = this.w / 2, ry = this.h / 2;
       const dx = gx - this.cx, dy = gy - this.cy;
@@ -116,7 +153,8 @@ export class Room {
   toJSON() {
     return { id: this.id, x: this.x, y: this.y, w: this.w, h: this.h,
              round: this.round, type: this.type, label: this.label,
-             notes: this.notes, water: this.water, icon: this.icon, order: this.order };
+             notes: this.notes, water: this.water, icon: this.icon, order: this.order,
+             points: this.points };
   }
 
   static fromJSON(d) {
@@ -124,6 +162,7 @@ export class Room {
     r.id    = d.id;
     r.type  = d.type;  r.label = d.label; r.notes = d.notes;
     r.water = d.water; r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
+    r.points = d.points ?? null;
     return r;
   }
 }
