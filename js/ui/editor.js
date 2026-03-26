@@ -64,6 +64,9 @@ export class Editor {
     el.addEventListener('touchmove',  e => this._onTouchMove(e),  { passive: false });
     el.addEventListener('touchend',   e => this._onTouchEnd(e));
 
+    // Double-click door type cycle
+    el.addEventListener('dblclick', e => this._onDoubleClick(e));
+
     // Keyboard shortcuts
     window.addEventListener('keydown', e => this._onKey(e));
   }
@@ -206,6 +209,39 @@ export class Editor {
         break;
     }
     this.renderer.ghostRoom = null;
+  }
+
+  _onDoubleClick(e) {
+    // Only allow cycling when in select mode (or adjust as desired)
+    if (this.tool !== 'select') return;
+
+    const { mx, my } = this._eventPos(e);
+    const clickedDoor = this._doorAtScreenPos(mx, my);
+    if (!clickedDoor) return;
+
+    this._cycleDoorType(clickedDoor);
+    this.renderer.selectedDoor = clickedDoor;
+    this.renderer.selectedRoom = null;
+    this.onUpdate();
+    this._emitSelection(null, clickedDoor);
+    this.onChanged?.();
+  }
+
+  _doorAtScreenPos(mx, my) {
+    for (const door of this.dungeon.doors) {
+      const dpx = this.renderer.gx(door.x);
+      const dpy = this.renderer.gy(door.y);
+      const dist = Math.hypot(mx - dpx, my - dpy);
+      if (dist < 12) return door;
+    }
+    return null;
+  }
+
+  _cycleDoorType(door) {
+    const types = Object.values(DOOR_TYPE);
+    const current = types.indexOf(door.type);
+    const next = (current + 1) % types.length;
+    door.type = types[next];
   }
 
   _onMouseLeave() {
