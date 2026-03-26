@@ -58,6 +58,7 @@ export class Room {
     this.h     = h;
     this.round = round;
     this.points = points;
+    this.mergeGroup = null;
 
     this.type    = ROOM_TYPE.NORMAL;
     this.label   = '';
@@ -154,7 +155,7 @@ export class Room {
     return { id: this.id, x: this.x, y: this.y, w: this.w, h: this.h,
              round: this.round, type: this.type, label: this.label,
              notes: this.notes, water: this.water, icon: this.icon, order: this.order,
-             points: this.points };
+             points: this.points, mergeGroup: this.mergeGroup };
   }
 
   static fromJSON(d) {
@@ -163,6 +164,7 @@ export class Room {
     r.type  = d.type;  r.label = d.label; r.notes = d.notes;
     r.water = d.water; r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
     r.points = d.points ?? null;
+    r.mergeGroup = d.mergeGroup ?? null;
     return r;
   }
 }

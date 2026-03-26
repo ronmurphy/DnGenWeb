@@ -97,7 +97,7 @@ export class Renderer {
     if (this.mergeRooms) {
       this._drawMergedWalls(ctx, dungeon, cs);
     } else {
-      this._drawWalls(ctx, dungeon, cs);
+      this._drawTargetedWalls(ctx, dungeon, cs);
     }
 
     // 4. Shading / hatching
@@ -111,7 +111,7 @@ export class Renderer {
     if (this.mergeRooms) {
       this._drawMergedWalls(ctx, dungeon, cs);
     } else {
-      this._drawWalls(ctx, dungeon, cs);
+      this._drawTargetedWalls(ctx, dungeon, cs);
     }
 
     // 5. Cracks / floor details
@@ -188,6 +188,38 @@ export class Renderer {
       ctx.beginPath();
       this._roomPath(ctx, room, cs);
       ctx.stroke();
+    }
+  }
+
+  // ── Targeted Merge: draw isolated rooms normally, groups merged ─────────────
+
+  _drawTargetedWalls(ctx, dungeon, cs) {
+    const groups = new Map();
+    const isolated = [];
+
+    // Group rooms by mergeGroup
+    for (const room of dungeon.rooms) {
+      if (room.hidden) continue;
+      if (room.mergeGroup) {
+        if (!groups.has(room.mergeGroup)) groups.set(room.mergeGroup, []);
+        groups.get(room.mergeGroup).push(room);
+      } else {
+        isolated.push(room);
+      }
+    }
+
+    // Draw isolated rooms uses regular smooth _drawWalls
+    if (isolated.length > 0) {
+      this._drawWalls(ctx, { rooms: isolated }, cs);
+    }
+
+    // Draw groups using continuous perimeter _drawMergedWalls
+    for (const group of groups.values()) {
+      if (group.length > 1) {
+        this._drawMergedWalls(ctx, { rooms: group }, cs);
+      } else {
+        this._drawWalls(ctx, { rooms: group }, cs);
+      }
     }
   }
 

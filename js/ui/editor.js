@@ -434,15 +434,11 @@ export class Editor {
     const ghost = this.renderer.ghostRoom;
     if (ghost.w < 1 || ghost.h < 1) return;
 
-    // In merge mode allow overlaps — rooms will be visually merged.
-    // Otherwise reject rooms that overlap an existing one.
-    if (!this.renderer.mergeRooms) {
-      for (const r of this.dungeon.rooms) {
-        if (ghost.overlaps(r)) return;
-      }
-    }
+    // In the new targeted merging system, we don't reject overlaps.
+    // We visually merge them by assigning a shared mergeGroup.
 
     const room = new Room({ x: ghost.x, y: ghost.y, w: ghost.w, h: ghost.h, round: ghost.round });
+    this._assignMergeGroup(room);
     this.dungeon.addRoom(room);
     this.renderer.selectedRoom = room;
     this.renderer.selectedDoor = null;
@@ -497,6 +493,7 @@ export class Editor {
     room.round = false;
     room.points = points;
 
+    this._assignMergeGroup(room);
     this.dungeon.addRoom(room);
     this.renderer.selectedRoom = room;
     this.renderer.selectedDoor = null;
@@ -506,6 +503,41 @@ export class Editor {
     this.onUpdate();
     this._emitSelection(room, null);
     this.onChanged?.();
+  }
+
+  // ── Targeted Merging ───────────────────────────────────────────────────────
+
+  /** Assigns this room and any intersecting rooms to a common group. */
+  _assignMergeGroup(newRoom) {
+    let targetGroup = null;
+    const overlappedGroups = new Set();
+    const overlappedRooms = [];
+
+    // Bounding-box intersection is fast and sufficient for targeted grouping of grid shapes
+    for (const r of this.dungeon.rooms) {
+      if (r === newRoom) continue;
+      if (newRoom.overlaps(r)) {
+         overlappedRooms.push(r);
+         if (r.mergeGroup) overlappedGroups.add(r.mergeGroup);
+      }
+    }
+
+    if (overlappedRooms.length > 0) {
+       targetGroup = overlappedGroups.size > 0 
+           ? Array.from(overlappedGroups)[0] 
+           : Date.now().toString(36) + Math.random().toString(36).substring(2);
+       
+       for (const r of overlappedRooms) {
+           r.mergeGroup = targetGroup;
+       }
+       // Consolidate groups (if the new room bridges two existing distinct groups)
+       for (const r of this.dungeon.rooms) {
+           if (overlappedGroups.has(r.mergeGroup)) {
+              r.mergeGroup = targetGroup;
+           }
+       }
+       newRoom.mergeGroup = targetGroup;
+    }
   }
 
   // ── Door wall finder ───────────────────────────────────────────────────────
