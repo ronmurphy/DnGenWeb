@@ -151,13 +151,12 @@ export class Renderer {
 
   _drawFloors(ctx, dungeon, cs) {
     ctx.fillStyle = Style.floor;
+    ctx.beginPath();
     for (const room of dungeon.rooms) {
       if (room.hidden) continue;
-      ctx.beginPath();
       this._roomPath(ctx, room, cs);
-      ctx.fillStyle = Style.floor;
-      ctx.fill();
     }
+    ctx.fill('nonzero');
   }
 
   // ── Water ──────────────────────────────────────────────────────────────────
@@ -165,12 +164,12 @@ export class Renderer {
   _drawWater(ctx, dungeon, cs) {
     ctx.fillStyle = Style.water;
     ctx.globalAlpha = 0.55;
+    ctx.beginPath();
     for (const room of dungeon.rooms) {
       if (!room.water || room.hidden) continue;
-      ctx.beginPath();
       this._roomPath(ctx, room, cs);
-      ctx.fill();
     }
+    ctx.fill('nonzero');
     ctx.globalAlpha = 1;
   }
 
@@ -757,15 +756,15 @@ export class Renderer {
     const sd = Style.shadowDist * cs * 0.06;
     ctx.globalAlpha = 0.2;
     ctx.fillStyle   = '#000000';
+    ctx.save();
+    ctx.translate(sd, sd);
+    ctx.beginPath();
     for (const room of dungeon.rooms) {
       if (room.hidden) continue;
-      ctx.save();
-      ctx.translate(sd, sd);
-      ctx.beginPath();
       this._roomPath(ctx, room, cs);
-      ctx.fill();
-      ctx.restore();
     }
+    ctx.fill('nonzero');
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
@@ -986,7 +985,6 @@ export class Renderer {
   _roomPath(ctx, room, cs, inflate = 0) {
     if (room.points && room.points.length >= 3) {
       const pts = room.points;
-      ctx.beginPath();
       ctx.moveTo(pts[0].x * cs, pts[0].y * cs);
       for (let i = 1; i < pts.length; i++) {
         ctx.lineTo(pts[i].x * cs, pts[i].y * cs);
@@ -996,7 +994,11 @@ export class Renderer {
     }
 
     if (room.round) {
-      ctx.arc(room.cx * cs, room.cy * cs, (room.w / 2) * cs + inflate, 0, Math.PI * 2);
+      const cx = room.cx * cs;
+      const cy = room.cy * cs;
+      const r = (room.w / 2) * cs + inflate;
+      ctx.moveTo(cx + r, cy);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
     } else {
       const x = room.x * cs - inflate;
       const y = room.y * cs - inflate;
