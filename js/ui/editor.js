@@ -41,6 +41,9 @@ export class Editor {
 
     // Polygon tool state
     this._polygonPoints = [];
+
+    // Modifier keys state
+    this._shiftKey = false;
     this._bindEvents();
   }
 
@@ -80,6 +83,11 @@ export class Editor {
 
     // Keyboard shortcuts
     window.addEventListener('keydown', e => this._onKey(e));
+    window.addEventListener('keyup', e => {
+      if (e.key === 'Shift') {
+        this._shiftKey = false;
+      }
+    });
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -202,10 +210,25 @@ export class Editor {
       return;
     }
 
+    if (this.tool === 'resize' && !this._dragging && this.renderer.selectedRoom) {
+      const g = this._toGrid(mx, my);
+      this.renderer.hoverResizeHandle = this._hitResizeHandle(this.renderer.selectedRoom, g);
+      if (this.renderer.hoverResizeHandle) {
+        this.canvas.style.cursor = 'pointer';
+      } else {
+        this.canvas.style.cursor = 'default';
+      }
+      this.onUpdate();
+    } else if (this.tool !== 'resize') {
+      this.renderer.hoverResizeHandle = null;
+      this.canvas.style.cursor = 'default';
+    }
+
     // Resize selected room
     if (this._resizingRoom && this.renderer.selectedRoom) {
       const snap = this._snapToGrid(mx, my);
-      this._applyResize(this.renderer.selectedRoom, snap);
+      const shift = e.shiftKey || this._shiftKey;
+      this._applyResize(this.renderer.selectedRoom, snap, shift);
       this.onUpdate();
       return;
     }
@@ -291,6 +314,8 @@ export class Editor {
       this._resizeHandle = null;
       this._resizeRoomStart = null;
       this._resizeDragStart = null;
+      this.renderer.hoverResizeHandle = null;
+      this.canvas.style.cursor = 'default';
       this.onChanged?.();
       return;
     }
@@ -582,7 +607,7 @@ export class Editor {
     return null;
   }
 
-  _applyResize(room, snap) {
+  _applyResize(room, snap, shift = false) {
     if (!this._resizeRoomStart || !this._resizeHandle) return;
 
     const handle = this._resizeHandle;
@@ -634,10 +659,29 @@ export class Editor {
 
     if (handle.type === 'corners' || handle.type === 'edge') {
       const dir = handle.dir || '';
-      if (dir.includes('w')) x0 = Math.min(snap.x, x1 - 1);
-      if (dir.includes('e')) x1 = Math.max(snap.x, x0 + 1);
-      if (dir.includes('n')) y0 = Math.min(snap.y, y1 - 1);
-      if (dir.includes('s')) y1 = Math.max(snap.y, y0 + 1);
+
+      if (shift && handle.type === 'corners') {
+        const moveDx = snap.x - this._resizeDragStart.x;
+        const moveDy = snap.y - this._resizeDragStart.y;
+        const lockHorizontal = Math.abs(moveDx) > Math.abs(moveDy);
+
+        if (lockHorizontal) {
+          if (dir.includes('n')) y0 = base.y;
+          if (dir.includes('s')) y1 = base.y + base.h;
+        } else {
+          if (dir.includes('w')) x0 = base.x;
+          if (dir.includes('e')) x1 = base.x + base.w;
+        }
+      }
+
+      if (!shift || handle.type === 'edge' || (handle.type === 'corners' && Math.abs(snap.x - this._resizeDragStart.x) >= Math.abs(snap.y - this._resizeDragStart.y))) {
+        if (dir.includes('w')) x0 = Math.min(snap.x, x1 - 1);
+        if (dir.includes('e')) x1 = Math.max(snap.x, x0 + 1);
+      }
+      if (!shift || handle.type === 'edge' || (handle.type === 'corners' && Math.abs(snap.y - this._resizeDragStart.y) >= Math.abs(snap.x - this._resizeDragStart.x))) {
+        if (dir.includes('n')) y0 = Math.min(snap.y, y1 - 1);
+        if (dir.includes('s')) y1 = Math.max(snap.y, y0 + 1);
+      }
 
       room.x = x0;
       room.y = y0;
@@ -763,6 +807,11 @@ export class Editor {
 
   _onKey(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'Shift') {
+      this._shiftKey = true;
+      return;
+    }
 
     switch (e.key.toLowerCase()) {
       case 'v': this.setTool('select');     break;

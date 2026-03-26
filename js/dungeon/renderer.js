@@ -44,6 +44,7 @@ export class Renderer {
     this.showLegend   = true;
     this.showGraphPaper = false;
     this.showResizeHandles = false;
+    this.hoverResizeHandle = null;
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -980,15 +981,19 @@ export class Renderer {
     ctx.restore();
 
     if (this.showResizeHandles) {
-      this._drawResizeHandles(ctx, cs, room);
+      this._drawResizeHandles(ctx, cs, room, this.hoverResizeHandle);
     }
   }
 
-  _drawResizeHandles(ctx, cs, room) {
+  _drawResizeHandles(ctx, cs, room, hoverHandle) {
     const handleRadius = Math.max(3, 0.08 * cs);
-    const drawDot = (x, y) => {
+
+    const drawDotStyled = (x, y, fill, stroke) => {
       ctx.beginPath();
       ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
     };
@@ -997,19 +1002,28 @@ export class Renderer {
     ctx.fillStyle = '#f8f8ff';
     ctx.strokeStyle = '#4c4c82';
     ctx.lineWidth = 1;
+    ctx.fillStyle = '#f8f8ff';
+    ctx.strokeStyle = '#4c4c82';
+    ctx.lineWidth = 1;
 
     if (room.points && room.points.length >= 3) {
-      for (const p of room.points) {
-        drawDot(p.x * cs, p.y * cs);
-      }
+      room.points.forEach((p, idx) => {
+        const isHover = hoverHandle && hoverHandle.type === 'vertex' && hoverHandle.index === idx;
+        const color = isHover ? '#ffab00' : '#f8f8ff';
+        const stroke = isHover ? '#ff0000' : '#4c4c82';
+        drawDotStyled(p.x * cs, p.y * cs, color, stroke);
+      });
     } else if (room.round) {
       const cx = room.cx * cs;
       const cy = room.cy * cs;
       const r = (room.w / 2) * cs;
-      drawDot(cx + r, cy);
-      drawDot(cx - r, cy);
-      drawDot(cx, cy + r);
-      drawDot(cx, cy - r);
+      ['e', 'w', 'n', 's'].forEach((dir, index) => {
+        const pos = dir === 'e' ? [cx + r, cy] : dir === 'w' ? [cx - r, cy] : dir === 'n' ? [cx, cy - r] : [cx, cy + r];
+        const isHover = hoverHandle && hoverHandle.type === 'circle';
+        const color = isHover ? '#ffab00' : '#f8f8ff';
+        const stroke = isHover ? '#ff0000' : '#4c4c82';
+        drawDotStyled(pos[0], pos[1], color, stroke);
+      });
     } else {
       const x0 = room.x * cs;
       const y0 = room.y * cs;
@@ -1018,14 +1032,25 @@ export class Renderer {
       const cx = (x0 + x1) / 2;
       const cy = (y0 + y1) / 2;
 
-      drawDot(x0, y0);
-      drawDot(x1, y0);
-      drawDot(x0, y1);
-      drawDot(x1, y1);
-      drawDot(cx, y0);
-      drawDot(cx, y1);
-      drawDot(x0, cy);
-      drawDot(x1, cy);
+      const corners = [
+        {x:x0, y:y0, type:'corners', dir:'nw'},
+        {x:x1, y:y0, type:'corners', dir:'ne'},
+        {x:x0, y:y1, type:'corners', dir:'sw'},
+        {x:x1, y:y1, type:'corners', dir:'se'}
+      ];
+      const edges = [
+        {x:cx, y:y0, type:'edge', dir:'n'},
+        {x:cx, y:y1, type:'edge', dir:'s'},
+        {x:x0, y:cy, type:'edge', dir:'w'},
+        {x:x1, y:cy, type:'edge', dir:'e'}
+      ];
+
+      corners.concat(edges).forEach(handle => {
+        const isHover = hoverHandle && hoverHandle.type === handle.type && hoverHandle.dir === handle.dir;
+        const color = isHover ? '#ffab00' : '#f8f8ff';
+        const stroke = isHover ? '#ff0000' : '#4c4c82';
+        drawDotStyled(handle.x, handle.y, color, stroke);
+      });
     }
 
     ctx.restore();
