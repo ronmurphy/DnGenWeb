@@ -41,6 +41,7 @@ export class Renderer {
     this.showProps    = true;
     this.mergeRooms   = false;
     this.showLegend   = true;
+    this.showGraphPaper = false;
   }
 
   // ── Coordinate helpers ──────────────────────────────────────────────────────
@@ -79,6 +80,8 @@ export class Renderer {
     ctx.save();
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(this.panX, this.panY);
+
+    if (this.showGraphPaper) this._drawGraphPaper(ctx, dungeon, this.cellSize);
 
     const cs = this.cellSize;
     const rng = new RNG(dungeon.seed);
@@ -342,6 +345,56 @@ export class Renderer {
   }
 
   // ── Grid lines ──────────────────────────────────────────────────────────────
+
+  _drawGraphPaper(ctx, dungeon, cs) {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const xMin = Math.floor((-this.panX) / cs) - 1;
+    const yMin = Math.floor((-this.panY) / cs) - 1;
+    const xMax = Math.ceil((W / this.zoom - this.panX) / cs) + 1;
+    const yMax = Math.ceil((H / this.zoom - this.panY) / cs) + 1;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(34, 86, 163, 0.25)'; // blue graph paper
+    ctx.lineWidth = 1;
+
+    // light every cell
+    ctx.globalAlpha = 0.2;
+    for (let gx = xMin; gx <= xMax; gx++) {
+      const x = gx * cs;
+      ctx.beginPath();
+      ctx.moveTo(x, yMin * cs);
+      ctx.lineTo(x, yMax * cs);
+      ctx.stroke();
+    }
+    for (let gy = yMin; gy <= yMax; gy++) {
+      const y = gy * cs;
+      ctx.beginPath();
+      ctx.moveTo(xMin * cs, y);
+      ctx.lineTo(xMax * cs, y);
+      ctx.stroke();
+    }
+
+    // heavier lines every 5th cell
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.5;
+    for (let gx = Math.ceil(xMin / 5) * 5; gx <= xMax; gx += 5) {
+      const x = gx * cs;
+      ctx.beginPath();
+      ctx.moveTo(x, yMin * cs);
+      ctx.lineTo(x, yMax * cs);
+      ctx.stroke();
+    }
+    for (let gy = Math.ceil(yMin / 5) * 5; gy <= yMax; gy += 5) {
+      const y = gy * cs;
+      ctx.beginPath();
+      ctx.moveTo(xMin * cs, y);
+      ctx.lineTo(xMax * cs, y);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
 
   _drawGridLines(ctx, dungeon, cs) {
     if (this.gridMode === 'none') return;

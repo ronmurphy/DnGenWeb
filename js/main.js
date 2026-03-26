@@ -260,10 +260,11 @@ function syncStyle() {
   ShadingConfig.mode = document.getElementById('sel-hatching').value;
   renderer.gridMode  = document.getElementById('sel-grid').value;
 
-  renderer.showShadows = document.getElementById('chk-shadows').checked;
-  renderer.showProps   = document.getElementById('chk-props').checked;
-  renderer.mergeRooms  = document.getElementById('chk-merge').checked;
-  renderer.showLegend  = document.getElementById('chk-legend').checked;
+  renderer.showShadows    = document.getElementById('chk-shadows').checked;
+  renderer.showProps      = document.getElementById('chk-props').checked;
+  renderer.mergeRooms     = document.getElementById('chk-merge').checked;
+  renderer.showLegend     = document.getElementById('chk-legend').checked;
+  renderer.showGraphPaper = document.getElementById('chk-graph-paper').checked;
 
   renderer.cellSize = parseInt(document.getElementById('cell-size').value, 10);
 
@@ -272,7 +273,7 @@ function syncStyle() {
 
 ['col-ink','col-paper','col-floor','col-shading',
  'stroke-thin','stroke-hatch','stroke-normal','stroke-thick',
- 'sel-hatching','sel-grid','chk-shadows','chk-props','chk-merge','chk-legend','cell-size']
+ 'sel-hatching','sel-grid','chk-shadows','chk-props','chk-merge','chk-legend','chk-graph-paper','cell-size']
   .forEach(id => document.getElementById(id).addEventListener('input', syncStyle));
 
 // ── Story controls ─────────────────────────────────────────────────────────────
