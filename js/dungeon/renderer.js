@@ -325,23 +325,85 @@ export class Renderer {
   _drawDetails(ctx, dungeon, cs, rng) {
     ctx.strokeStyle = Style.ink;
     ctx.lineWidth   = Style.thin;
-    ctx.globalAlpha = 0.4;
+    ctx.globalAlpha = 0.65;
+
+    const propTypes = ['bed', 'chair', 'table', 'chest'];
 
     for (const room of dungeon.rooms) {
       if (room.hidden || room.w < 4 || room.h < 4) continue;
-      const count = Math.floor((room.w + room.h) * rng.next() * 0.3);
+      const area = room.w * room.h;
+      const count = Math.max(1, Math.min(5, Math.floor(area * 0.05 + rng.next() * 1.5)));
+
       for (let i = 0; i < count; i++) {
-        const cx = (room.x + rng.float(0.5, room.w - 0.5)) * cs;
-        const cy = (room.y + rng.float(0.5, room.h - 0.5)) * cs;
-        const len = cs * rng.float(0.2, 0.7);
-        const ang = rng.next() * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
-        ctx.stroke();
+        const px = (room.x + rng.float(0.7, room.w - 0.7)) * cs;
+        const py = (room.y + rng.float(0.7, room.h - 0.7)) * cs;
+        const psize = cs * rng.float(0.6, 1.2);
+        const type = propTypes[Math.floor(rng.next() * propTypes.length)];
+
+        ctx.save();
+        this._drawProp(ctx, type, px, py, psize, rng);
+        ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  _drawProp(ctx, type, x, y, size, rng) {
+    const half = size / 2;
+    const direction = rng.next() < 0.5 ? 0 : Math.PI / 2;
+    ctx.translate(x, y);
+    ctx.rotate(direction);
+
+    switch (type) {
+      case 'bed':
+        ctx.fillStyle = 'rgba(200, 200, 230, 0.7)';
+        ctx.fillRect(-half, -half * 0.6, size, half * 1.2);
+        ctx.strokeRect(-half, -half * 0.6, size, half * 1.2);
+        ctx.beginPath();
+        ctx.moveTo(-half, -half * 0.2);
+        ctx.lineTo(half, -half * 0.2);
+        ctx.stroke();
+        break;
+
+      case 'chair':
+        ctx.fillStyle = 'rgba(220, 180, 140, 0.7)';
+        ctx.fillRect(-half * 0.7, -half * 0.7, half * 1.4, half * 1.4);
+        ctx.strokeRect(-half * 0.7, -half * 0.7, half * 1.4, half * 1.4);
+        ctx.beginPath();
+        ctx.moveTo(-half * 0.7, -half * 0.7);
+        ctx.lineTo(-half * 0.7, -half * 1.1);
+        ctx.moveTo(half * 0.7, -half * 0.7);
+        ctx.lineTo(half * 0.7, -half * 1.1);
+        ctx.stroke();
+        break;
+
+      case 'table':
+        ctx.fillStyle = 'rgba(190, 160, 120, 0.7)';
+        ctx.fillRect(-half * 0.9, -half * 0.4, half * 1.8, half * 0.8);
+        ctx.strokeRect(-half * 0.9, -half * 0.4, half * 1.8, half * 0.8);
+        // legs
+        const leg = half * 0.15;
+        ctx.fillRect(-half * 0.8, half * 0.3, leg, leg);
+        ctx.fillRect(half * 0.65, half * 0.3, leg, leg);
+        ctx.fillRect(-half * 0.8, -half * 0.45, leg, leg);
+        ctx.fillRect(half * 0.65, -half * 0.45, leg, leg);
+        break;
+
+      case 'chest':
+        ctx.fillStyle = 'rgba(160, 110, 90, 0.7)';
+        ctx.fillRect(-half, -half * 0.5, size, half);
+        ctx.strokeRect(-half, -half * 0.5, size, half);
+        ctx.beginPath();
+        ctx.moveTo(-half, -half * 0.5);
+        ctx.lineTo(half, -half * 0.5);
+        ctx.stroke();
+        break;
+
+      default:
+        ctx.fillStyle = 'rgba(180, 180, 180, 0.7)';
+        ctx.fillRect(-half, -half, size, size);
+        ctx.strokeRect(-half, -half, size, size);
+    }
   }
 
   // ── Grid lines ──────────────────────────────────────────────────────────────
