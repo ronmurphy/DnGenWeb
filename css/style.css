@@ -17,7 +17,7 @@
   --peach:      #fab387;
   --teal:       #94e2d5;
   --danger:     #f38ba8;
-  --panel-w:    210px;
+  --panel-w:    240px;
   --rail-w:     42px;
   --topbar-h:   34px;
   --statusbar-h: 24px;
@@ -230,6 +230,7 @@ html, body {
   top: 8px; left: 8px;
   width: var(--rail-w);
   display: flex; flex-direction: column; gap: 2px;
+  cursor: grab;
   background: var(--panel-glass);
   backdrop-filter: blur(var(--panel-blur));
   -webkit-backdrop-filter: blur(var(--panel-blur));
@@ -293,6 +294,19 @@ html, body {
 
 #tool-rail .tool-btn:hover::after {
   opacity: 1;
+}
+
+#tool-rail .rail-grip {
+  cursor: grab;
+  user-select: none;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2px;
+  font-size: 10px;
+}
+
+#tool-rail .rail-grip:hover {
+  color: var(--text);
 }
 
 /* ╔══════════════════════════════════════════════════════════════════════════╗
@@ -480,7 +494,9 @@ html, body {
 }
 
 .ctrl-slider input[type="range"] {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 90px);
   accent-color: var(--accent);
   height: 4px;
 }

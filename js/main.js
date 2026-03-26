@@ -7,6 +7,7 @@ import { Renderer } from './dungeon/renderer.js';
 import { generator, bspGenerator, classicGenerator } from './dungeon/generator.js';
 import { Editor } from './ui/editor.js';
 import { Style, ShadingConfig } from './dungeon/shading.js';
+import { initDraggablePanels } from './ui/utility.js';
 import { exportAdventureText } from './dungeon/export.js';
 
 // ── Undo / Redo ───────────────────────────────────────────────────────────────
@@ -188,6 +189,137 @@ window.addEventListener('keydown', e => {
   }
 });
 
+const LAYOUT_KEY = 'dungeonDesignerLayout_v1';
+const workspaceEl = document.getElementById('workspace');
+
+function _getRelativePosition(el) {
+  const workspaceRect = workspaceEl.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  return {
+    top: Math.round(rect.top - workspaceRect.top),
+    left: Math.round(rect.left - workspaceRect.left),
+  };
+}
+
+function _setPosition(el, pos) {
+  if (!pos) return;
+  el.style.top = `${pos.top}px`;
+  el.style.left = `${pos.left}px`;
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+}
+
+function updateViewMenuCheckboxes() {
+  document.querySelectorAll('[data-toggle-panel]').forEach(btn => {
+    const panel = document.getElementById(btn.getAttribute('data-toggle-panel'));
+    if (panel) {
+      btn.setAttribute('data-checked', panel.classList.contains('hidden') ? 'false' : 'true');
+    }
+  });
+}
+
+function savePanelLayout() {
+  if (!workspaceEl || !window.localStorage) return;
+
+  const panelIds = ['panel-style', 'panel-props', 'panel-story'];
+  const layout = { panels: {}, toolRail: {} };
+
+  panelIds.forEach(id => {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    const pos = _getRelativePosition(panel);
+    layout.panels[id] = {
+      top: pos.top,
+      left: pos.left,
+      hidden: panel.classList.contains('hidden'),
+      pinned: panel.querySelector('.pin-btn')?.getAttribute('data-pinned') === 'true',
+    };
+  });
+
+  const toolRail = document.getElementById('tool-rail');
+  if (toolRail) {
+    layout.toolRail = _getRelativePosition(toolRail);
+  }
+
+  window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function applyPanelLayout() {
+  if (!workspaceEl || !window.localStorage) return;
+
+  const raw = window.localStorage.getItem(LAYOUT_KEY);
+  if (!raw) return;
+
+  try {
+    const layout = JSON.parse(raw);
+    if (layout?.panels) {
+      Object.entries(layout.panels).forEach(([id, info]) => {
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        if (info?.top != null && info?.left != null) {
+          _setPosition(panel, info);
+        }
+        panel.classList.toggle('hidden', !!info?.hidden);
+
+        const pinBtn = panel.querySelector('.pin-btn');
+        if (pinBtn) {
+          const pinned = info?.pinned !== false;
+          pinBtn.setAttribute('data-pinned', pinned ? 'true' : 'false');
+          pinBtn.classList.toggle('pinned', pinned);
+          pinBtn.textContent = pinned ? '📌' : '📍';
+        }
+      });
+    }
+
+    if (layout?.toolRail) {
+      const toolRail = document.getElementById('tool-rail');
+      if (toolRail && layout.toolRail.top != null && layout.toolRail.left != null) {
+        _setPosition(toolRail, layout.toolRail);
+      }
+    }
+
+    updateViewMenuCheckboxes();
+  } catch {
+    // ignore invalid layout data
+  }
+}
+
+function resetPanelLayout() {
+  if (!workspaceEl) return;
+  window.localStorage && window.localStorage.removeItem(LAYOUT_KEY);
+
+  const panelIds = ['panel-style', 'panel-props', 'panel-story'];
+  panelIds.forEach(id => {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.style.top = '';
+    panel.style.left = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+    panel.classList.remove('hidden');
+
+    const pinBtn = panel.querySelector('.pin-btn');
+    if (pinBtn) {
+      pinBtn.setAttribute('data-pinned', 'true');
+      pinBtn.classList.add('pinned');
+      pinBtn.textContent = '📌';
+    }
+  });
+
+  const toolRail = document.getElementById('tool-rail');
+  if (toolRail) {
+    toolRail.style.left = '';
+    toolRail.style.top = '';
+  }
+
+  updateViewMenuCheckboxes();
+  savePanelLayout();
+}
+
+applyPanelLayout();
+
+if (workspaceEl) initDraggablePanels(workspaceEl, { onDragEnd: savePanelLayout });
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  FLOATING PANEL SYSTEM (close / pin / collapse sections)
 // ══════════════════════════════════════════════════════════════════════════════
@@ -200,6 +332,7 @@ document.querySelectorAll('.floating-panel .close-btn').forEach(btn => {
     // Update View menu checkmark
     const viewBtn = document.querySelector(`[data-toggle-panel="${panel.id}"]`);
     if (viewBtn) viewBtn.setAttribute('data-checked', 'false');
+    savePanelLayout();
   });
 });
 
@@ -210,6 +343,7 @@ document.querySelectorAll('.floating-panel .pin-btn').forEach(btn => {
     btn.setAttribute('data-pinned', isPinned ? 'false' : 'true');
     btn.classList.toggle('pinned', !isPinned);
     btn.textContent = !isPinned ? '📌' : '📍';
+    savePanelLayout();
   });
 });
 
@@ -221,8 +355,17 @@ document.querySelectorAll('[data-toggle-panel]').forEach(btn => {
     if (!panel) return;
     const isHidden = panel.classList.toggle('hidden');
     btn.setAttribute('data-checked', isHidden ? 'false' : 'true');
+    savePanelLayout();
   });
 });
+
+// View menu: reset panel layout
+const resetLayoutBtn = document.getElementById('btn-reset-layout');
+if (resetLayoutBtn) {
+  resetLayoutBtn.addEventListener('click', () => {
+    resetPanelLayout();
+  });
+}
 
 // View menu: toggle rendering options
 document.querySelectorAll('[data-toggle-opt]').forEach(btn => {
