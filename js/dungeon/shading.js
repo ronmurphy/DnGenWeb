@@ -78,6 +78,14 @@ function buildAreaPath(ctx, a) {
   if (a.type === 'circle') {
     ctx.moveTo(a.cx + a.r, a.cy);
     ctx.arc(a.cx, a.cy, a.r, 0, Math.PI * 2);
+  } else if (a.type === 'poly') {
+    const pts = a.points;
+    if (!pts || pts.length < 3) return;
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.closePath();
   } else {
     const r = Math.min(3, a.w / 4, a.h / 4);
     if (r < 1) {
@@ -334,6 +342,20 @@ function drawDots(ctx, areas, inflated) {
 
 function inflateArea(a, amount) {
   if (a.type === 'circle') return { ...a, r: Math.max(0, a.r + amount) };
+  if (a.type === 'poly') {
+    const pts = a.points;
+    if (!pts || pts.length < 3) return { ...a };
+    const cx = pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
+    const cy = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
+    const out = pts.map(p => {
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d <= Number.EPSILON) return { x: p.x, y: p.y };
+      return { x: p.x + dx / d * amount, y: p.y + dy / d * amount };
+    });
+    return { type: 'poly', points: out };
+  }
   return { ...a,
     x: a.x - amount, y: a.y - amount,
     w: Math.max(0, a.w + 2 * amount),
@@ -343,12 +365,22 @@ function inflateArea(a, amount) {
 
 function areaAABB(a) {
   if (a.type === 'circle') return { x: a.cx - a.r, y: a.cy - a.r, w: 2 * a.r, h: 2 * a.r };
+  if (a.type === 'poly') {
+    const xs = a.points.map(p => p.x);
+    const ys = a.points.map(p => p.y);
+    const x0 = Math.min(...xs);
+    const y0 = Math.min(...ys);
+    const x1 = Math.max(...xs);
+    const y1 = Math.max(...ys);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
   return { x: a.x, y: a.y, w: a.w, h: a.h };
 }
 
 function pointInArea(a, px, py) {
   if (!a) return false;
   if (a.type === 'circle') return (px - a.cx) ** 2 + (py - a.cy) ** 2 <= a.r * a.r;
+  if (a.type === 'poly') return pointInPolygon(a.points, px, py);
   return px >= a.x && px <= a.x + a.w && py >= a.y && py <= a.y + a.h;
 }
 
@@ -360,7 +392,46 @@ function distToAreaEdge(a, px, py) {
   if (a.type === 'circle') {
     return a.r - Math.sqrt((px - a.cx) ** 2 + (py - a.cy) ** 2);
   }
+  if (a.type === 'poly') {
+    const pts = a.points;
+    if (!pts || pts.length < 3) return -Infinity;
+    let minDist = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const p1 = pts[i];
+      const p2 = pts[(i + 1) % pts.length];
+      minDist = Math.min(minDist, pointToSegmentDistance(px, py, p1.x, p1.y, p2.x, p2.y));
+    }
+    const inside = pointInPolygon(pts, px, py);
+    return inside ? minDist : -minDist;
+  }
   const dx = Math.min(px - a.x, a.x + a.w - px);
   const dy = Math.min(py - a.y, a.y + a.h - py);
   return Math.min(dx, dy);
+}
+
+function pointInPolygon(points, px, py) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, yi = points[i].y;
+    const xj = points[j].x, yj = points[j].y;
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < (xj - xi) * (py - yi) / (yj - yi + Number.EPSILON) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+  const vx = x2 - x1;
+  const vy = y2 - y1;
+  const wx = px - x1;
+  const wy = py - y1;
+  const c1 = vx * wx + vy * wy;
+  if (c1 <= 0) return Math.hypot(px - x1, py - y1);
+  const c2 = vx * vx + vy * vy;
+  if (c2 <= c1) return Math.hypot(px - x2, py - y2);
+  const t = c1 / c2;
+  const projx = x1 + t * vx;
+  const projy = y1 + t * vy;
+  return Math.hypot(px - projx, py - projy);
 }

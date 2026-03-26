@@ -328,6 +328,12 @@ export class Renderer {
         r:    (room.w / 2) * cs,
       };
     }
+    if (room.points && room.points.length >= 3) {
+      return {
+        type: 'poly',
+        points: room.points.map(p => ({ x: p.x * cs, y: p.y * cs })),
+      };
+    }
     return {
       type: 'rect',
       x:    room.x * cs,
