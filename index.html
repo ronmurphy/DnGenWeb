@@ -22,6 +22,10 @@
         <button class="tool-btn" data-tool="erase" title="Erase (E)">&#10005;</button>
       </div>
       <div class="toolbar-group">
+        <button id="btn-undo" title="Undo (Ctrl+Z)" disabled>&#8592; Undo</button>
+        <button id="btn-redo" title="Redo (Ctrl+Y)" disabled>Redo &#8594;</button>
+      </div>
+      <div class="toolbar-group">
         <button id="btn-generate" title="Generate random dungeon">Generate</button>
         <button id="btn-clear" title="Clear canvas">Clear</button>
       </div>
@@ -34,8 +38,18 @@
             <option value="classic">Rooms + Corridors</option>
           </select>
         </label>
+        <label>Size
+          <select id="sel-gen-size">
+            <option value="small">Small</option>
+            <option value="medium" selected>Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
       </div>
       <div class="toolbar-group">
+        <button id="btn-save-json" title="Save dungeon as JSON">Save JSON</button>
+        <button id="btn-load-json" title="Load dungeon from JSON">Load JSON</button>
+        <input type="file" id="input-load-json" accept=".json" style="display:none">
         <button id="btn-export-png" title="Export as PNG">PNG</button>
         <button id="btn-export-svg" title="Export as SVG">SVG</button>
         <button id="btn-save-adventure" title="Save adventure text + map">Save Adventure</button>
@@ -59,9 +73,9 @@
           <label>Grid
             <select id="sel-grid">
               <option value="none">None</option>
-              <option value="dotted" selected>Dotted</option>
+              <option value="dotted">Dotted</option>
               <option value="dashed">Dashed</option>
-              <option value="solid">Solid</option>
+              <option value="solid" selected> Solid</option>
             </select>
           </label>
           <label>Ink <input type="color" id="col-ink" value="#1a1a2e"></label>
@@ -149,6 +163,10 @@
           <h3>Story</h3>
           <label>Name <input type="text" id="story-name" placeholder="Dungeon name..."></label>
           <label>Hook <textarea id="story-hook" rows="3" placeholder="Adventure hook..."></textarea></label>
+        </section>
+        <section class="panel-section">
+          <h3>Stats</h3>
+          <p id="dungeon-stats" class="stats-readout">0 rooms · 0 doors</p>
         </section>
       </aside>
 

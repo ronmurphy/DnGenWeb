@@ -18,11 +18,19 @@ export class Editor {
     this.onUpdate = onUpdate;
     this.tool     = 'select';
 
+    // Called after structural changes (room/door added/removed/moved) — use for undo history
+    this.onChanged = null;
+
     // Draw-in-progress state
     this._dragging   = false;
     this._dragStart  = null;  // { gx, gy } snapped grid
     this._isPanning  = false;
     this._panStart   = null;  // { mx, my, panX, panY }
+
+    // Move-room drag state
+    this._movingRoom    = false;
+    this._moveRoomStart = null; // { x, y } original room position before drag
+    this._moveDragStart = null; // { x, y } snapped grid at drag start
 
     this._bindEvents();
   }
@@ -95,7 +103,19 @@ export class Editor {
     this._dragStart = snap;
 
     switch (this.tool) {
-      case 'select': this._selectAt(mx, my); break;
+      case 'select': {
+        // If clicking on the already-selected room, start a move drag
+        const g = this._toGrid(mx, my);
+        const clicked = this.dungeon.roomAt(g.x, g.y);
+        if (clicked && clicked === this.renderer.selectedRoom) {
+          this._movingRoom    = true;
+          this._moveRoomStart = { x: clicked.x, y: clicked.y };
+          this._moveDragStart = snap;
+        } else {
+          this._selectAt(mx, my);
+        }
+        break;
+      }
       case 'erase':  this._eraseAt(mx, my);  break;
     }
   }
@@ -109,6 +129,17 @@ export class Editor {
       const dy = (my - this._panStart.my) / this.renderer.zoom;
       this.renderer.panX = panX + dx;
       this.renderer.panY = panY + dy;
+      this.onUpdate();
+      return;
+    }
+
+    // Move selected room
+    if (this._movingRoom && this.renderer.selectedRoom) {
+      const snap = this._snapToGrid(mx, my);
+      const dx = snap.x - this._moveDragStart.x;
+      const dy = snap.y - this._moveDragStart.y;
+      this.renderer.selectedRoom.x = this._moveRoomStart.x + dx;
+      this.renderer.selectedRoom.y = this._moveRoomStart.y + dy;
       this.onUpdate();
       return;
     }
@@ -150,6 +181,15 @@ export class Editor {
 
   _onMouseUp(e) {
     if (this._isPanning) { this._isPanning = false; return; }
+
+    // Finalize room move
+    if (this._movingRoom) {
+      this._movingRoom = false;
+      this._dragging   = false;
+      this.onChanged?.();
+      return;
+    }
+
     if (!this._dragging) return;
     this._dragging = false;
 
@@ -169,6 +209,7 @@ export class Editor {
   }
 
   _onMouseLeave() {
+    this._movingRoom = false;
     this.renderer.ghostRoom = null;
     this.onUpdate();
   }
@@ -281,6 +322,7 @@ export class Editor {
         this.dungeon.removeDoor(door);
         if (this.renderer.selectedDoor === door) this.renderer.selectedDoor = null;
         this.onUpdate();
+        this.onChanged?.();
         return;
       }
     }
@@ -290,6 +332,7 @@ export class Editor {
       if (this.renderer.selectedRoom === room) this.renderer.selectedRoom = null;
       this.dungeon.removeRoom(room);
       this.onUpdate();
+      this.onChanged?.();
     }
   }
 
@@ -312,6 +355,7 @@ export class Editor {
     this.renderer.selectedDoor = null;
     this.onUpdate();
     this._emitSelection(room, null);
+    this.onChanged?.();
   }
 
   _placeDoor(snap) {
@@ -336,6 +380,7 @@ export class Editor {
     this.renderer.ghostDoor    = null;
     this.onUpdate();
     this._emitSelection(null, door);
+    this.onChanged?.();
   }
 
   // ── Door wall finder ───────────────────────────────────────────────────────
@@ -396,11 +441,13 @@ export class Editor {
           this.renderer.selectedRoom = null;
           this.onUpdate();
           this._emitSelection(null, null);
+          this.onChanged?.();
         } else if (this.renderer.selectedDoor) {
           this.dungeon.removeDoor(this.renderer.selectedDoor);
           this.renderer.selectedDoor = null;
           this.onUpdate();
           this._emitSelection(null, null);
+          this.onChanged?.();
         }
         break;
       case 'escape':

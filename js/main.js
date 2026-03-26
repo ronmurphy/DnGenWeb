@@ -9,6 +9,53 @@ import { Editor } from './ui/editor.js';
 import { Style, ShadingConfig } from './dungeon/shading.js';
 import { exportAdventureText } from './dungeon/export.js';
 
+// ── Undo / Redo ───────────────────────────────────────────────────────────────
+
+const MAX_HISTORY = 50;
+let _undoStack  = [];
+let _undoCursor = -1;
+
+function pushHistory() {
+  _undoStack = _undoStack.slice(0, _undoCursor + 1);
+  _undoStack.push(JSON.stringify(dungeon.toJSON()));
+  if (_undoStack.length > MAX_HISTORY) _undoStack.shift();
+  _undoCursor = _undoStack.length - 1;
+  _syncUndoButtons();
+}
+
+function _restoreHistory(json) {
+  dungeon = Dungeon.fromJSON(JSON.parse(json));
+  editor.setDungeon(dungeon);
+  document.getElementById('story-name').value = dungeon.name;
+  document.getElementById('story-hook').value = dungeon.hook;
+  render();
+}
+
+function undo() {
+  if (_undoCursor <= 0) return;
+  _undoCursor--;
+  _restoreHistory(_undoStack[_undoCursor]);
+  _syncUndoButtons();
+}
+
+function redo() {
+  if (_undoCursor >= _undoStack.length - 1) return;
+  _undoCursor++;
+  _restoreHistory(_undoStack[_undoCursor]);
+  _syncUndoButtons();
+}
+
+function _syncUndoButtons() {
+  document.getElementById('btn-undo').disabled = _undoCursor <= 0;
+  document.getElementById('btn-redo').disabled = _undoCursor >= _undoStack.length - 1;
+}
+
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+  if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redo(); }
+});
+
 // ── Canvas setup ─────────────────────────────────────────────────────────────
 
 const canvasArea = document.getElementById('canvas-area');
@@ -31,11 +78,14 @@ renderer.panX = 10;
 renderer.panY = 10;
 
 const editor = new Editor(canvas, renderer, dungeon, render);
+editor.onChanged = pushHistory;
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 
 function render() {
   renderer.render(dungeon);
+  const statsEl = document.getElementById('dungeon-stats');
+  if (statsEl) statsEl.textContent = `${dungeon.rooms.length} rooms · ${dungeon.doors.length} doors`;
 }
 
 // ── Status bar ─────────────────────────────────────────────────────────────────
@@ -64,6 +114,11 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
 });
 setStatus('select'); // initial hint
 
+// ── Toolbar: undo / redo ──────────────────────────────────────────────────────
+
+document.getElementById('btn-undo').addEventListener('click', undo);
+document.getElementById('btn-redo').addEventListener('click', redo);
+
 // ── Toolbar: generate ─────────────────────────────────────────────────────────
 
 const GENERATORS = {
@@ -75,12 +130,14 @@ const GENERATORS = {
 document.getElementById('btn-generate').addEventListener('click', () => {
   const seed   = parseInt(document.getElementById('input-seed').value, 10) || Date.now();
   const method = document.getElementById('sel-gen-method').value;
+  const size   = document.getElementById('sel-gen-size').value;
   const gen    = GENERATORS[method] ?? generator;
-  dungeon = gen.generate(seed, []);
+  dungeon = gen.generate(seed, size ? [size] : []);
   editor.setDungeon(dungeon);
   document.getElementById('story-name').value = dungeon.name;
   document.getElementById('story-hook').value = dungeon.hook;
   _centerView();
+  pushHistory();
   render();
 });
 
@@ -91,6 +148,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   const seed = parseInt(document.getElementById('input-seed').value, 10) || 12345;
   dungeon = new Dungeon(seed);
   editor.setDungeon(dungeon);
+  pushHistory();
   render();
 });
 
@@ -117,6 +175,44 @@ document.getElementById('btn-export-svg').addEventListener('click', () => {
     link.click();
     URL.revokeObjectURL(url);
   }, 'image/png');
+});
+
+// ── JSON Save / Load ──────────────────────────────────────────────────────────
+
+document.getElementById('btn-save-json').addEventListener('click', () => {
+  const json = JSON.stringify(dungeon.toJSON(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = (dungeon.name || 'dungeon').replace(/\s+/g, '_') + '.json';
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('btn-load-json').addEventListener('click', () => {
+  document.getElementById('input-load-json').click();
+});
+
+document.getElementById('input-load-json').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      dungeon = Dungeon.fromJSON(JSON.parse(ev.target.result));
+      editor.setDungeon(dungeon);
+      document.getElementById('story-name').value = dungeon.name;
+      document.getElementById('story-hook').value = dungeon.hook;
+      pushHistory();
+      _centerView();
+      render();
+    } catch {
+      alert('Could not read dungeon file — make sure it is a valid .json file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // allow reloading the same file
 });
 
 // ── Export: Save Adventure (Markdown + PNG) ────────────────────────────────────
@@ -292,3 +388,5 @@ document.getElementById('story-name').value = dungeon.name;
 document.getElementById('story-hook').value = dungeon.hook;
 _centerView();
 render();
+pushHistory(); // seed initial undo state
+_syncUndoButtons();
