@@ -32,6 +32,13 @@ export class Editor {
     this._moveRoomStart   = null; // { x, y } original room position before drag
     this._moveRoomPoints  = null; // polygon points snapshot for move
     this._moveDragStart   = null; // { x, y } snapped grid at drag start
+
+    // Resize state
+    this._resizingRoom     = false;
+    this._resizeRoomStart  = null; // copy of room params before resizing
+    this._resizeHandle     = null; // { type, dir, index }
+    this._resizeDragStart  = null; // { x, y }
+
     // Polygon tool state
     this._polygonPoints = [];
     this._bindEvents();
@@ -126,6 +133,40 @@ export class Editor {
     this._dragStart = snap;
 
     switch (this.tool) {
+      case 'resize': {
+        const room = this.renderer.selectedRoom;
+        if (!room) {
+          this._selectAt(mx, my);
+          break;
+        }
+        const g = this._toGrid(mx, my);
+        const handle = this._hitResizeHandle(room, g);
+        if (!handle) {
+          // click inside room but not near handles => move
+          if (room.contains(g.x, g.y)) {
+            this._movingRoom    = true;
+            this._moveRoomStart = { x: room.x, y: room.y };
+            this._moveDragStart = snap;
+            this._moveRoomPoints = room.points ? room.points.map(p => ({ x: p.x, y: p.y })) : null;
+          } else {
+            this._selectAt(mx, my);
+          }
+          break;
+        }
+
+        this._resizingRoom = true;
+        this._resizeHandle = handle;
+        this._resizeDragStart = snap;
+        if (room.points && room.points.length > 0) {
+          this._resizeRoomStart = {
+            points: room.points.map(p => ({ x: p.x, y: p.y })),
+            x: room.x, y: room.y, w: room.w, h: room.h, round: room.round,
+          };
+        } else {
+          this._resizeRoomStart = { x: room.x, y: room.y, w: room.w, h: room.h, round: room.round };
+        }
+        break;
+      }
       case 'select': {
         // If clicking on the already-selected room, start a move drag
         const g = this._toGrid(mx, my);
@@ -157,6 +198,14 @@ export class Editor {
       const dy = (my - this._panStart.my) / this.renderer.zoom;
       this.renderer.panX = panX + dx;
       this.renderer.panY = panY + dy;
+      this.onUpdate();
+      return;
+    }
+
+    // Resize selected room
+    if (this._resizingRoom && this.renderer.selectedRoom) {
+      const snap = this._snapToGrid(mx, my);
+      this._applyResize(this.renderer.selectedRoom, snap);
       this.onUpdate();
       return;
     }
@@ -235,6 +284,17 @@ export class Editor {
   _onMouseUp(e) {
     if (this._isPanning) { this._isPanning = false; return; }
 
+    // Finalize room resize
+    if (this._resizingRoom) {
+      this._resizingRoom = false;
+      this._dragging = false;
+      this._resizeHandle = null;
+      this._resizeRoomStart = null;
+      this._resizeDragStart = null;
+      this.onChanged?.();
+      return;
+    }
+
     // Finalize room move
     if (this._movingRoom) {
       this._movingRoom = false;
@@ -263,7 +323,11 @@ export class Editor {
       case 'door':
         this._placeDoor(snap);
         break;
+      case 'resize':
+        // Nothing to finalize when no room was selected
+        break;
     }
+    this._dragging = false;
     this.renderer.ghostRoom = null;
   }
 
@@ -302,6 +366,8 @@ export class Editor {
 
   _onMouseLeave() {
     this._movingRoom = false;
+    this._resizingRoom = false;
+    this._resizeHandle = null;
     this.renderer.ghostRoom = null;
     this.renderer.ghostPolygon = null;
     this.onUpdate();
@@ -475,6 +541,119 @@ export class Editor {
   _pointNear(a, b, dist = 0.5) {
     if (!a || !b) return false;
     return Math.hypot(a.x - b.x, a.y - b.y) <= dist;
+  }
+
+  _hitResizeHandle(room, g) {
+    // polygon vertices
+    if (room.points && room.points.length >= 3) {
+      for (let i = 0; i < room.points.length; i++) {
+        if (this._pointNear(room.points[i], g, 0.7)) {
+          return { type: 'vertex', index: i };
+        }
+      }
+      return room.contains(g.x, g.y) ? { type: 'move' } : null;
+    }
+
+    // round room: center + radius
+    if (room.round) {
+      const center = { x: room.cx, y: room.cy };
+      const r = room.w / 2;
+      const d = Math.hypot(g.x - center.x, g.y - center.y);
+      if (Math.abs(d - r) <= 0.7) return { type: 'circle' };
+      if (d < r) return { type: 'move' };
+      return null;
+    }
+
+    // rectangular room edges/corners
+    const x0 = room.x;
+    const y0 = room.y;
+    const x1 = room.x + room.w;
+    const y1 = room.y + room.h;
+    const near = (ux, uy) => Math.abs(g.x - ux) <= 0.7 && Math.abs(g.y - uy) <= 0.7;
+    if (near(x0, y0)) return { type: 'corners', dir: 'nw' };
+    if (near(x1, y0)) return { type: 'corners', dir: 'ne' };
+    if (near(x0, y1)) return { type: 'corners', dir: 'sw' };
+    if (near(x1, y1)) return { type: 'corners', dir: 'se' };
+    if (Math.abs(g.x - x0) <= 0.7 && g.y >= y0 && g.y <= y1) return { type: 'edge', dir: 'w' };
+    if (Math.abs(g.x - x1) <= 0.7 && g.y >= y0 && g.y <= y1) return { type: 'edge', dir: 'e' };
+    if (Math.abs(g.y - y0) <= 0.7 && g.x >= x0 && g.x <= x1) return { type: 'edge', dir: 'n' };
+    if (Math.abs(g.y - y1) <= 0.7 && g.x >= x0 && g.x <= x1) return { type: 'edge', dir: 's' };
+    if (g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1) return { type: 'move' };
+    return null;
+  }
+
+  _applyResize(room, snap) {
+    if (!this._resizeRoomStart || !this._resizeHandle) return;
+
+    const handle = this._resizeHandle;
+
+    if (handle.type === 'vertex' && room.points && room.points.length >= 3) {
+      const basePoints = this._resizeRoomStart.points;
+      room.points = basePoints.map((p, i) => {
+        if (i !== handle.index) return { x: p.x, y: p.y };
+        return { x: snap.x, y: snap.y };
+      });
+      room.x = room.bounds.x;
+      room.y = room.bounds.y;
+      room.w = room.bounds.w;
+      room.h = room.bounds.h;
+      return;
+    }
+
+    if (handle.type === 'circle' && room.round) {
+      const cx = this._resizeRoomStart.x + this._resizeRoomStart.w / 2;
+      const cy = this._resizeRoomStart.y + this._resizeRoomStart.h / 2;
+      const r = Math.max(1, Math.hypot(snap.x - cx, snap.y - cy));
+      room.w = room.h = r * 2;
+      room.x = cx - r;
+      room.y = cy - r;
+      return;
+    }
+
+    const base = this._resizeRoomStart;
+    let x0 = base.x;
+    let y0 = base.y;
+    let x1 = base.x + base.w;
+    let y1 = base.y + base.h;
+
+    if (handle.type === 'move') {
+      const dx = snap.x - this._resizeDragStart.x;
+      const dy = snap.y - this._resizeDragStart.y;
+      if (room.points && room.points.length >= 3) {
+        room.points = base.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+        room.x = room.bounds.x;
+        room.y = room.bounds.y;
+        room.w = room.bounds.w;
+        room.h = room.bounds.h;
+      } else {
+        room.x = base.x + dx;
+        room.y = base.y + dy;
+      }
+      return;
+    }
+
+    if (handle.type === 'corners' || handle.type === 'edge') {
+      const dir = handle.dir || '';
+      if (dir.includes('w')) x0 = Math.min(snap.x, x1 - 1);
+      if (dir.includes('e')) x1 = Math.max(snap.x, x0 + 1);
+      if (dir.includes('n')) y0 = Math.min(snap.y, y1 - 1);
+      if (dir.includes('s')) y1 = Math.max(snap.y, y0 + 1);
+
+      room.x = x0;
+      room.y = y0;
+      room.w = Math.max(1, x1 - x0);
+      room.h = Math.max(1, y1 - y0);
+      if (room.round) {
+        const side = Math.max(room.w, room.h);
+        room.w = side;
+        room.h = side;
+      }
+      if (room.points && room.points.length >= 3) {
+        const dx = room.x - base.x;
+        const dy = room.y - base.y;
+        room.points = base.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+      }
+    }
   }
 
   _finishPolygon() {

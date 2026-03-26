@@ -104,6 +104,7 @@ const TOOL_HINTS = {
   'round-room': 'Draw Round Room (C) — click and drag to size a circular room',
   polygon:     'Draw Polygon Room (P) — click points to define a polygon',
   door:        'Place Door (D) — move near a shared wall, click to place',
+  resize:      'Resize (View > Resize) — drag room handles to reshape rooms',
   erase:       'Erase (E) — click a room or door to delete it',
 };
 function setStatus(tool) {
@@ -378,6 +379,25 @@ document.querySelectorAll('[data-toggle-opt]').forEach(btn => {
     syncStyle();
   });
 });
+
+// View menu: toggle Resize tool
+const resizeBtn = document.getElementById('btn-resize');
+if (resizeBtn) {
+  resizeBtn.addEventListener('click', () => {
+    const on = resizeBtn.getAttribute('data-checked') !== 'true';
+    resizeBtn.setAttribute('data-checked', on ? 'true' : 'false');
+    if (on) {
+      editor.setTool('resize');
+      document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
+      setStatus('resize');
+    } else {
+      editor.setTool('select');
+      const selectBtn = document.querySelector('#tool-rail .tool-btn[data-tool="select"]');
+      if (selectBtn) selectBtn.classList.add('active');
+      setStatus('select');
+    }
+  });
+}
 
 // Collapsible sections
 document.querySelectorAll('.collapse-header').forEach(header => {
