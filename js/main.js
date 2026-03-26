@@ -46,8 +46,10 @@ function redo() {
 }
 
 function _syncUndoButtons() {
-  document.getElementById('btn-undo').disabled = _undoCursor <= 0;
-  document.getElementById('btn-redo').disabled = _undoCursor >= _undoStack.length - 1;
+  const undoBtn = document.getElementById('btn-undo');
+  const redoBtn = document.getElementById('btn-redo');
+  if (undoBtn) undoBtn.style.opacity = _undoCursor <= 0 ? '0.35' : '1';
+  if (redoBtn) redoBtn.style.opacity = _undoCursor >= _undoStack.length - 1 ? '0.35' : '1';
 }
 
 window.addEventListener('keydown', e => {
@@ -86,42 +88,171 @@ function render() {
   renderer.render(dungeon);
   const statsEl = document.getElementById('dungeon-stats');
   if (statsEl) statsEl.textContent = `${dungeon.rooms.length} rooms · ${dungeon.doors.length} doors`;
+  // Update menubar title
+  const titleEl = document.getElementById('menubar-title');
+  if (titleEl && dungeon.name) titleEl.textContent = dungeon.name;
+  else if (titleEl) titleEl.textContent = 'Dungeon Designer';
 }
 
 // ── Status bar ─────────────────────────────────────────────────────────────────
 
 const statusBar = document.getElementById('status-bar');
 const TOOL_HINTS = {
-  select:      'Select (V) — click a room or door to edit its properties. Double-click a door to cycle door type. Delete/Backspace removes it.',
-  room:        'Draw Room (R) — click and drag to size a rectangular room.',
-  'round-room': 'Draw Round Room (C) — click and drag to size a circular room.',
-  polygon:     'Draw Polygon Room (P) — click points to define a polygon, click start point to close.',
-  door:        'Place Door (D) — move near a shared wall between two adjacent rooms; a blue preview appears. Click to place.',
-  erase:       'Erase (E) — click a room or door to delete it.',
+  select:      'Select (V) — click a room or door to edit its properties',
+  room:        'Draw Room (R) — click and drag to size a rectangular room',
+  'round-room': 'Draw Round Room (C) — click and drag to size a circular room',
+  polygon:     'Draw Polygon Room (P) — click points to define a polygon',
+  door:        'Place Door (D) — move near a shared wall, click to place',
+  erase:       'Erase (E) — click a room or door to delete it',
 };
 function setStatus(tool) {
   statusBar.textContent = TOOL_HINTS[tool] ?? '';
 }
 
-// ── Toolbar: tools ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  DROPDOWN MENU SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
 
-document.querySelectorAll('.tool-btn').forEach(btn => {
+let _openMenu = null;
+
+function openMenu(menuItem) {
+  closeAllMenus();
+  menuItem.classList.add('open');
+  _openMenu = menuItem;
+}
+
+function closeAllMenus() {
+  document.querySelectorAll('.menu-item.open').forEach(m => m.classList.remove('open'));
+  _openMenu = null;
+}
+
+// Click to toggle menus
+document.querySelectorAll('.menu-item > .menu-trigger').forEach(trigger => {
+  trigger.addEventListener('click', e => {
+    e.stopPropagation();
+    const item = trigger.closest('.menu-item');
+    if (item.classList.contains('open')) {
+      closeAllMenus();
+    } else {
+      openMenu(item);
+    }
+  });
+});
+
+// Hover to switch between open menus
+document.querySelectorAll('.menu-item').forEach(item => {
+  item.addEventListener('mouseenter', () => {
+    if (_openMenu && _openMenu !== item) {
+      openMenu(item);
+    }
+  });
+});
+
+// Close menus on click outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu-item')) closeAllMenus();
+});
+
+// Close menu after clicking a button inside dropdown
+document.querySelectorAll('.menu-dropdown button').forEach(btn => {
+  if (!btn.hasAttribute('data-toggle-panel') && !btn.hasAttribute('data-toggle-opt')) {
+    btn.addEventListener('click', () => closeAllMenus());
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TOOL RAIL
+// ══════════════════════════════════════════════════════════════════════════════
+
+document.querySelectorAll('#tool-rail .tool-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     editor.setTool(btn.dataset.tool);
     setStatus(btn.dataset.tool);
   });
 });
-setStatus('select'); // initial hint
+setStatus('select');
 
-// ── Toolbar: undo / redo ──────────────────────────────────────────────────────
+// Keyboard shortcuts for tools
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const keyMap = { v: 'select', r: 'room', c: 'round-room', p: 'polygon', d: 'door', e: 'erase' };
+  const tool = keyMap[e.key.toLowerCase()];
+  if (tool) {
+    document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`#tool-rail .tool-btn[data-tool="${tool}"]`);
+    if (btn) btn.classList.add('active');
+    editor.setTool(tool);
+    setStatus(tool);
+  }
+});
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  FLOATING PANEL SYSTEM (close / pin / collapse sections)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Close buttons
+document.querySelectorAll('.floating-panel .close-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panel = btn.closest('.floating-panel');
+    panel.classList.add('hidden');
+    // Update View menu checkmark
+    const viewBtn = document.querySelector(`[data-toggle-panel="${panel.id}"]`);
+    if (viewBtn) viewBtn.setAttribute('data-checked', 'false');
+  });
+});
+
+// Pin buttons
+document.querySelectorAll('.floating-panel .pin-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const isPinned = btn.getAttribute('data-pinned') === 'true';
+    btn.setAttribute('data-pinned', isPinned ? 'false' : 'true');
+    btn.classList.toggle('pinned', !isPinned);
+    btn.textContent = !isPinned ? '📌' : '📍';
+  });
+});
+
+// View menu: toggle panels
+document.querySelectorAll('[data-toggle-panel]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panelId = btn.getAttribute('data-toggle-panel');
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const isHidden = panel.classList.toggle('hidden');
+    btn.setAttribute('data-checked', isHidden ? 'false' : 'true');
+  });
+});
+
+// View menu: toggle rendering options
+document.querySelectorAll('[data-toggle-opt]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const chkId = btn.getAttribute('data-toggle-opt');
+    const chk = document.getElementById(chkId);
+    if (!chk) return;
+    chk.checked = !chk.checked;
+    btn.setAttribute('data-checked', chk.checked ? 'true' : 'false');
+    syncStyle();
+  });
+});
+
+// Collapsible sections
+document.querySelectorAll('.collapse-header').forEach(header => {
+  header.addEventListener('click', () => {
+    const section = header.closest('.collapse-section');
+    section.classList.toggle('collapsed');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TOOLBAR ACTIONS (wired to menu dropdown buttons)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Undo / Redo
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-redo').addEventListener('click', redo);
 
-// ── Toolbar: generate ─────────────────────────────────────────────────────────
-
+// Generate
 const GENERATORS = {
   organic: generator,
   bsp:     bspGenerator,
@@ -142,8 +273,7 @@ document.getElementById('btn-generate').addEventListener('click', () => {
   render();
 });
 
-// ── Toolbar: clear ────────────────────────────────────────────────────────────
-
+// Clear
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (!confirm('Clear the dungeon?')) return;
   const seed = parseInt(document.getElementById('input-seed').value, 10) || 12345;
@@ -153,8 +283,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   render();
 });
 
-// ── Export: PNG ───────────────────────────────────────────────────────────────
-
+// Export PNG
 document.getElementById('btn-export-png').addEventListener('click', () => {
   const offscreen = renderer.renderExport(dungeon, 2);
   const link = document.createElement('a');
@@ -163,10 +292,8 @@ document.getElementById('btn-export-png').addEventListener('click', () => {
   link.click();
 });
 
-// ── Export: SVG (basic, via canvas toBlob) ────────────────────────────────────
-
+// Export SVG
 document.getElementById('btn-export-svg').addEventListener('click', () => {
-  // For now, export as high-res PNG with SVG name — full SVG export is a future feature
   const offscreen = renderer.renderExport(dungeon, 3);
   offscreen.toBlob(blob => {
     const url  = URL.createObjectURL(blob);
@@ -178,8 +305,7 @@ document.getElementById('btn-export-svg').addEventListener('click', () => {
   }, 'image/png');
 });
 
-// ── JSON Save / Load ──────────────────────────────────────────────────────────
-
+// Save / Load JSON
 document.getElementById('btn-save-json').addEventListener('click', () => {
   const json = JSON.stringify(dungeon.toJSON(), null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -213,15 +339,13 @@ document.getElementById('input-load-json').addEventListener('change', e => {
     }
   };
   reader.readAsText(file);
-  e.target.value = ''; // allow reloading the same file
+  e.target.value = '';
 });
 
-// ── Export: Save Adventure (Markdown + PNG) ────────────────────────────────────
-
+// Save Adventure
 document.getElementById('btn-save-adventure').addEventListener('click', () => {
   const slug = (dungeon.name || 'dungeon').replace(/\s+/g, '_');
 
-  // Download Markdown text
   const md   = exportAdventureText(dungeon);
   const mdBlob = new Blob([md], { type: 'text/markdown' });
   const mdUrl  = URL.createObjectURL(mdBlob);
@@ -231,7 +355,6 @@ document.getElementById('btn-save-adventure').addEventListener('click', () => {
   mdLink.click();
   URL.revokeObjectURL(mdUrl);
 
-  // Download map PNG (slight delay so browser handles both downloads)
   setTimeout(() => {
     const offscreen = renderer.renderExport(dungeon, 2);
     offscreen.toBlob(blob => {
@@ -245,7 +368,9 @@ document.getElementById('btn-save-adventure').addEventListener('click', () => {
   }, 150);
 });
 
-// ── Style controls ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  STYLE CONTROLS
+// ══════════════════════════════════════════════════════════════════════════════
 
 function syncStyle() {
   Style.ink    = document.getElementById('col-ink').value;
@@ -272,21 +397,49 @@ function syncStyle() {
   render();
 }
 
-['col-ink','col-paper','col-floor','col-shading',
- 'stroke-thin','stroke-hatch','stroke-normal','stroke-thick',
- 'sel-hatching','sel-grid','chk-shadows','chk-props','chk-merge','chk-legend','chk-graph-paper','cell-size']
-  .forEach(id => document.getElementById(id).addEventListener('input', syncStyle));
+// Wire up color swatches: sync the swatch circle color live
+['col-ink', 'col-paper', 'col-floor', 'col-shading'].forEach(id => {
+  const input = document.getElementById(id);
+  input.addEventListener('input', () => {
+    const swatchId = 'swatch-' + id.replace('col-', '');
+    const swatch = document.getElementById(swatchId);
+    if (swatch) swatch.style.background = input.value;
+    syncStyle();
+  });
+});
 
-// ── Story controls ─────────────────────────────────────────────────────────────
+// Wire up sliders: show value readout
+document.querySelectorAll('.ctrl-slider input[type="range"]').forEach(slider => {
+  const valueSpan = slider.nextElementSibling;
+  slider.addEventListener('input', () => {
+    if (valueSpan && valueSpan.classList.contains('slider-value')) {
+      valueSpan.textContent = slider.value;
+    }
+    syncStyle();
+  });
+});
+
+// Wire up selects and remaining controls
+['sel-hatching', 'sel-grid'].forEach(id => {
+  document.getElementById(id).addEventListener('input', syncStyle);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STORY CONTROLS
+// ══════════════════════════════════════════════════════════════════════════════
 
 document.getElementById('story-name').addEventListener('input', e => {
   dungeon.name = e.target.value;
+  const titleEl = document.getElementById('menubar-title');
+  if (titleEl) titleEl.textContent = e.target.value || 'Dungeon Designer';
 });
 document.getElementById('story-hook').addEventListener('input', e => {
   dungeon.hook = e.target.value;
 });
 
-// ── Properties panel ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  PROPERTIES PANEL
+// ══════════════════════════════════════════════════════════════════════════════
 
 const propsEmpty = document.getElementById('props-empty');
 const propsRoom  = document.getElementById('props-room');
@@ -317,7 +470,6 @@ function showPropsDoor(door) {
   document.getElementById('prop-door-type').value = door.type ?? 'door';
 }
 
-// Selection events from editor
 window.addEventListener('dungeon:select', e => {
   const { room, door } = e.detail;
   if (room) showPropsRoom(room);
@@ -381,7 +533,7 @@ function _centerView() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 resizeCanvas();
-syncStyle(); // apply initial control values to renderer before first render
+syncStyle();
 
 // Generate a default dungeon on load
 dungeon = generator.generate(12345, []);
@@ -390,5 +542,5 @@ document.getElementById('story-name').value = dungeon.name;
 document.getElementById('story-hook').value = dungeon.hook;
 _centerView();
 render();
-pushHistory(); // seed initial undo state
+pushHistory();
 _syncUndoButtons();

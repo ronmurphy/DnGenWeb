@@ -10,165 +10,341 @@
 
   <div id="app">
 
-    <header id="toolbar">
-      <div class="toolbar-group">
-        <span class="app-title">Dungeon Designer</span>
+    <!-- ═══════════════════════ TOP MENU BAR ═══════════════════════ -->
+    <header id="menubar">
+
+      <!-- File menu -->
+      <div class="menu-item" data-menu="file">
+        <button class="menu-trigger">File <span class="chevron">▾</span></button>
+        <div class="menu-dropdown">
+          <button id="btn-save-json">Save JSON <span class="shortcut">Ctrl+S</span></button>
+          <button id="btn-load-json">Load JSON…</button>
+          <input type="file" id="input-load-json" accept=".json">
+          <div class="menu-sep"></div>
+          <button id="btn-export-png">Export PNG</button>
+          <button id="btn-export-svg">Export SVG</button>
+          <div class="menu-sep"></div>
+          <button id="btn-save-adventure">Save Adventure</button>
+        </div>
       </div>
-      <div class="toolbar-group" id="tools">
-        <button class="tool-btn active" data-tool="select" title="Select (V)">&#9654;</button>
-        <button class="tool-btn" data-tool="room" title="Draw Room (R)">&#9633;</button>
-        <button class="tool-btn" data-tool="round-room" title="Draw Round Room (C)">&#9675;</button>        <button class="tool-btn" data-tool="polygon" title="Draw Polygon Room (P)">&#x25B3;</button>        <button class="tool-btn" data-tool="door" title="Place Door (D)">&#9044;</button>
-        <button class="tool-btn" data-tool="erase" title="Erase (E)">&#10005;</button>
+
+      <!-- Edit menu -->
+      <div class="menu-item" data-menu="edit">
+        <button class="menu-trigger">Edit <span class="chevron">▾</span></button>
+        <div class="menu-dropdown">
+          <button id="btn-undo">Undo <span class="shortcut">Ctrl+Z</span></button>
+          <button id="btn-redo">Redo <span class="shortcut">Ctrl+Y</span></button>
+          <div class="menu-sep"></div>
+          <button id="btn-clear" class="menu-btn-danger">Clear All</button>
+        </div>
       </div>
-      <div class="toolbar-group">
-        <button id="btn-undo" title="Undo (Ctrl+Z)" disabled>&#8592; Undo</button>
-        <button id="btn-redo" title="Redo (Ctrl+Y)" disabled>Redo &#8594;</button>
+
+      <!-- View menu -->
+      <div class="menu-item" data-menu="view">
+        <button class="menu-trigger">View <span class="chevron">▾</span></button>
+        <div class="menu-dropdown">
+          <button data-toggle-panel="panel-style" data-checked="true">Style Panel</button>
+          <button data-toggle-panel="panel-props" data-checked="true">Properties Panel</button>
+          <button data-toggle-panel="panel-story" data-checked="true">Story Panel</button>
+          <div class="menu-sep"></div>
+          <button data-toggle-opt="chk-shadows" data-checked="true">Shadows</button>
+          <button data-toggle-opt="chk-props" data-checked="true">Props</button>
+          <button data-toggle-opt="chk-merge" data-checked="false">Merge Rooms</button>
+          <button data-toggle-opt="chk-legend" data-checked="true">Legend</button>
+          <button data-toggle-opt="chk-graph-paper" data-checked="true">Graph Paper</button>
+        </div>
       </div>
-      <div class="toolbar-group">
-        <button id="btn-generate" title="Generate random dungeon">Generate</button>
-        <button id="btn-clear" title="Clear canvas">Clear</button>
+
+      <!-- Generate menu -->
+      <div class="menu-item" data-menu="generate">
+        <button class="menu-trigger">Generate <span class="chevron">▾</span></button>
+        <div class="menu-dropdown">
+          <div class="menu-control">
+            <span>Seed</span>
+            <input id="input-seed" type="number" value="12345" min="1" max="999999999">
+          </div>
+          <div class="menu-control">
+            <span>Method</span>
+            <select id="sel-gen-method">
+              <option value="organic">Organic</option>
+              <option value="bsp">BSP</option>
+              <option value="classic">Rooms + Corridors</option>
+            </select>
+          </div>
+          <div class="menu-control">
+            <span>Size</span>
+            <select id="sel-gen-size">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+          <div class="menu-sep"></div>
+          <button id="btn-generate" class="menu-btn-accent">⚡ Generate Dungeon</button>
+        </div>
       </div>
-      <div class="toolbar-group">
-        <label>Seed <input id="input-seed" type="number" value="12345" min="1" max="999999999"></label>
-        <label>Method
-          <select id="sel-gen-method">
-            <option value="organic">Organic</option>
-            <option value="bsp">BSP</option>
-            <option value="classic">Rooms + Corridors</option>
-          </select>
-        </label>
-        <label>Size
-          <select id="sel-gen-size">
-            <option value="small">Small</option>
-            <option value="medium" selected>Medium</option>
-            <option value="large">Large</option>
-          </select>
-        </label>
-      </div>
-      <div class="toolbar-group">
-        <button id="btn-save-json" title="Save dungeon as JSON">Save JSON</button>
-        <button id="btn-load-json" title="Load dungeon from JSON">Load JSON</button>
-        <input type="file" id="input-load-json" accept=".json" style="display:none">
-        <button id="btn-export-png" title="Export as PNG">PNG</button>
-        <button id="btn-export-svg" title="Export as SVG">SVG</button>
-        <button id="btn-save-adventure" title="Save adventure text + map">Save Adventure</button>
-      </div>
+
+      <!-- Spacer -->
+      <div class="menubar-spacer"></div>
+
+      <!-- Center: dungeon title -->
+      <span class="menubar-title" id="menubar-title">Dungeon Designer</span>
+
+      <!-- Spacer -->
+      <div class="menubar-spacer"></div>
+
+      <!-- Right: stats -->
+      <span class="menubar-stats" id="dungeon-stats">0 rooms · 0 doors</span>
     </header>
 
+    <!-- ═══════════════════════ WORKSPACE ═══════════════════════ -->
     <div id="workspace">
 
-      <aside id="panel-left">
-        <section class="panel-section">
-          <h3>Style</h3>
-          <label>Hatching
-            <select id="sel-hatching">
-              <option value="default">Default</option>
-              <option value="stonework">Stonework</option>
-              <option value="bricks">Bricks</option>
-              <option value="dots">Dots</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-          <label>Grid
-            <select id="sel-grid">
-              <option value="none">None</option>
-              <option value="dotted">Dotted</option>
-              <option value="dashed">Dashed</option>
-              <option value="solid" selected> Solid</option>
-            </select>
-          </label>
-          <label>Ink <input type="color" id="col-ink" value="#1a1a2e"></label>
-          <label>Paper <input type="color" id="col-paper" value="#f5f0e8"></label>
-          <label>Floor <input type="color" id="col-floor" value="#e8e0d0"></label>
-          <label>Shading <input type="color" id="col-shading" value="#c8b89a"></label>
-        </section>
-        <section class="panel-section">
-          <h3>Strokes</h3>
-          <label>Thin <input type="range" id="stroke-thin" min="0.2" max="2" step="0.1" value="0.5"></label>
-          <label>Hatching <input type="range" id="stroke-hatch" min="0.2" max="3" step="0.1" value="1.0"></label>
-          <label>Normal <input type="range" id="stroke-normal" min="0.5" max="3" step="0.1" value="1.5"></label>
-          <label>Thick <input type="range" id="stroke-thick" min="1" max="6" step="0.2" value="3.0"></label>
-        </section>
-        <section class="panel-section">
-          <h3>View</h3>
-          <label>Cell size <input type="range" id="cell-size" min="16" max="64" step="4" value="30"></label>
-          <label><input type="checkbox" id="chk-shadows" checked> Shadows</label>
-          <label><input type="checkbox" id="chk-props" checked> Props</label>
-          <label><input type="checkbox" id="chk-merge"> Merge overlapping rooms</label>
-          <label><input type="checkbox" id="chk-legend" checked> Show legend</label>
-          <label><input type="checkbox" id="chk-graph-paper" checked> Graph paper background</label>
-        </section>
-      </aside>
-
+      <!-- Canvas (fills workspace) -->
       <main id="canvas-area">
         <canvas id="dungeon-canvas"></canvas>
         <div id="status-bar"></div>
       </main>
 
-      <aside id="panel-right">
-        <section class="panel-section" id="props-panel">
-          <h3>Properties</h3>
-          <p id="props-empty">Select a room or door to edit its properties.</p>
-          <div id="props-room" style="display:none">
-            <label>Label <input type="text" id="prop-room-label" placeholder="Room name..."></label>
-            <label>Order <input type="text" id="prop-room-order" placeholder="Entry, 1, 2, Boss, End..."></label>
-            <label>Type
-              <select id="prop-room-type">
-                <option value="normal">Normal</option>
-                <option value="entrance">Entrance</option>
-                <option value="boss">Boss Room</option>
-                <option value="treasure">Treasure</option>
-                <option value="trap">Trap</option>
-              </select>
-            </label>
-            <label>Icon
-              <select id="prop-room-icon">
-                <option value="none">— None —</option>
-                <option value="entrance">▲ Entrance</option>
-                <option value="exit">▼ Exit</option>
-                <option value="boss">☠ Boss</option>
-                <option value="treasure">★ Treasure</option>
-                <option value="trap">⚠ Trap</option>
-                <option value="shrine">✝ Shrine</option>
-                <option value="arcane">✦ Arcane</option>
-                <option value="prison">⊠ Prison</option>
-                <option value="armory">⚔ Armory</option>
-                <option value="forge">⚒ Forge</option>
-                <option value="throne">♛ Throne</option>
-                <option value="crypt">✠ Crypt</option>
-                <option value="library">≡ Library</option>
-                <option value="tavern">◆ Tavern</option>
-                <option value="guard">⊕ Guard Post</option>
-                <option value="puzzle">? Puzzle</option>
-              </select>
-            </label>
-            <label><input type="checkbox" id="prop-room-water"> Contains water</label>
-            <label>Notes<textarea id="prop-room-notes" rows="4" placeholder="Room description..."></textarea></label>
-            <button id="btn-delete-room" class="danger">Delete Room</button>
+      <!-- ── Tool Rail ── -->
+      <div id="tool-rail">
+        <button class="tool-btn active" data-tool="select" data-tooltip="Select (V)">▶</button>
+        <button class="tool-btn" data-tool="room" data-tooltip="Draw Room (R)">▢</button>
+        <button class="tool-btn" data-tool="round-room" data-tooltip="Round Room (C)">○</button>
+        <button class="tool-btn" data-tool="polygon" data-tooltip="Polygon Room (P)">△</button>
+        <button class="tool-btn" data-tool="door" data-tooltip="Place Door (D)">⊞</button>
+        <button class="tool-btn" data-tool="erase" data-tooltip="Erase (E)">✕</button>
+      </div>
+
+      <!-- ── Style Panel (left floating) ── -->
+      <div class="floating-panel" id="panel-style">
+        <div class="panel-titlebar">
+          <h2>Style</h2>
+          <button class="panel-titlebar-btn pin-btn" title="Pin panel" data-pinned="true">📌</button>
+          <button class="panel-titlebar-btn close-btn" title="Close panel">×</button>
+        </div>
+        <div class="panel-body">
+
+          <!-- Hatching -->
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> Hatching
+            </button>
+            <div class="collapse-content">
+              <div class="ctrl-row">
+                <select id="sel-hatching">
+                  <option value="default">Default</option>
+                  <option value="stonework">Stonework</option>
+                  <option value="bricks">Bricks</option>
+                  <option value="dots">Dots</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div id="props-door" style="display:none">
-            <label>Type
-              <select id="prop-door-type">
-                <option value="open">Open Archway</option>
-                <option value="door">Door</option>
-                <option value="locked">Locked Door</option>
-                <option value="secret">Secret Door</option>
-                <option value="portcullis">Portcullis</option>
-              </select>
-            </label>
-            <button id="btn-delete-door" class="danger">Delete Door</button>
+
+          <!-- Colors -->
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> Colors
+            </button>
+            <div class="collapse-content">
+              <div class="color-swatches">
+                <label class="color-swatch">
+                  <div class="swatch-circle" id="swatch-ink" style="background:#1a1a2e"></div>
+                  <span class="swatch-label">Ink</span>
+                  <input type="color" id="col-ink" value="#1a1a2e">
+                </label>
+                <label class="color-swatch">
+                  <div class="swatch-circle" id="swatch-paper" style="background:#f5f0e8"></div>
+                  <span class="swatch-label">Paper</span>
+                  <input type="color" id="col-paper" value="#f5f0e8">
+                </label>
+                <label class="color-swatch">
+                  <div class="swatch-circle" id="swatch-floor" style="background:#e8e0d0"></div>
+                  <span class="swatch-label">Floor</span>
+                  <input type="color" id="col-floor" value="#e8e0d0">
+                </label>
+                <label class="color-swatch">
+                  <div class="swatch-circle" id="swatch-shading" style="background:#c8b89a"></div>
+                  <span class="swatch-label">Shade</span>
+                  <input type="color" id="col-shading" value="#c8b89a">
+                </label>
+              </div>
+            </div>
           </div>
-        </section>
-        <section class="panel-section">
-          <h3>Story</h3>
-          <label>Name <input type="text" id="story-name" placeholder="Dungeon name..."></label>
-          <label>Hook <textarea id="story-hook" rows="3" placeholder="Adventure hook..."></textarea></label>
-        </section>
-        <section class="panel-section">
-          <h3>Stats</h3>
-          <p id="dungeon-stats" class="stats-readout">0 rooms · 0 doors</p>
-        </section>
-      </aside>
+
+          <!-- Strokes -->
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> Strokes
+            </button>
+            <div class="collapse-content">
+              <div class="ctrl-slider">
+                <span class="slider-label">Thin</span>
+                <input type="range" id="stroke-thin" min="0.2" max="2" step="0.1" value="0.5">
+                <span class="slider-value">0.5</span>
+              </div>
+              <div class="ctrl-slider">
+                <span class="slider-label">Hatch</span>
+                <input type="range" id="stroke-hatch" min="0.2" max="3" step="0.1" value="1.0">
+                <span class="slider-value">1.0</span>
+              </div>
+              <div class="ctrl-slider">
+                <span class="slider-label">Normal</span>
+                <input type="range" id="stroke-normal" min="0.5" max="3" step="0.1" value="1.5">
+                <span class="slider-value">1.5</span>
+              </div>
+              <div class="ctrl-slider">
+                <span class="slider-label">Thick</span>
+                <input type="range" id="stroke-thick" min="1" max="6" step="0.2" value="3.0">
+                <span class="slider-value">3.0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- View -->
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> View
+            </button>
+            <div class="collapse-content">
+              <div class="ctrl-slider">
+                <span class="slider-label">Cell size</span>
+                <input type="range" id="cell-size" min="16" max="64" step="4" value="30">
+                <span class="slider-value">30</span>
+              </div>
+              <div class="ctrl-row">
+                <select id="sel-grid">
+                  <option value="none">Grid: None</option>
+                  <option value="dotted">Grid: Dotted</option>
+                  <option value="dashed">Grid: Dashed</option>
+                  <option value="solid" selected>Grid: Solid</option>
+                </select>
+              </div>
+              <!-- Hidden checkboxes that the View menu and syncStyle read from -->
+              <input type="checkbox" id="chk-shadows" checked style="display:none">
+              <input type="checkbox" id="chk-props" checked style="display:none">
+              <input type="checkbox" id="chk-merge" style="display:none">
+              <input type="checkbox" id="chk-legend" checked style="display:none">
+              <input type="checkbox" id="chk-graph-paper" checked style="display:none">
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Properties Panel (right floating) ── -->
+      <div class="floating-panel" id="panel-props">
+        <div class="panel-titlebar">
+          <h2>Properties</h2>
+          <button class="panel-titlebar-btn pin-btn" title="Pin panel" data-pinned="true">📌</button>
+          <button class="panel-titlebar-btn close-btn" title="Close panel">×</button>
+        </div>
+        <div class="panel-body">
+
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> Selection
+            </button>
+            <div class="collapse-content">
+              <p id="props-empty" style="font-size:11px;color:var(--text-dim);padding:2px 0;">Select a room or door to edit.</p>
+
+              <div id="props-room" style="display:none">
+                <div class="ctrl-row">
+                  <span>Label</span>
+                  <input type="text" id="prop-room-label" placeholder="Room name…">
+                </div>
+                <div class="ctrl-row">
+                  <span>Order</span>
+                  <input type="text" id="prop-room-order" placeholder="Entry, 1, 2…">
+                </div>
+                <div class="ctrl-row">
+                  <span>Type</span>
+                  <select id="prop-room-type">
+                    <option value="normal">Normal</option>
+                    <option value="entrance">Entrance</option>
+                    <option value="boss">Boss Room</option>
+                    <option value="treasure">Treasure</option>
+                    <option value="trap">Trap</option>
+                  </select>
+                </div>
+                <div class="ctrl-row">
+                  <span>Icon</span>
+                  <select id="prop-room-icon">
+                    <option value="none">— None —</option>
+                    <option value="entrance">▲ Entrance</option>
+                    <option value="exit">▼ Exit</option>
+                    <option value="boss">☠ Boss</option>
+                    <option value="treasure">★ Treasure</option>
+                    <option value="trap">⚠ Trap</option>
+                    <option value="shrine">✝ Shrine</option>
+                    <option value="arcane">✦ Arcane</option>
+                    <option value="prison">⊠ Prison</option>
+                    <option value="armory">⚔ Armory</option>
+                    <option value="forge">⚒ Forge</option>
+                    <option value="throne">♛ Throne</option>
+                    <option value="crypt">✠ Crypt</option>
+                    <option value="library">≡ Library</option>
+                    <option value="tavern">◆ Tavern</option>
+                    <option value="guard">⊕ Guard Post</option>
+                    <option value="puzzle">? Puzzle</option>
+                  </select>
+                </div>
+                <label class="ctrl-check">
+                  <input type="checkbox" id="prop-room-water"> Contains water
+                </label>
+                <div class="ctrl-row">
+                  <span>Notes</span>
+                  <textarea id="prop-room-notes" rows="3" placeholder="Room description…"></textarea>
+                </div>
+                <button id="btn-delete-room" class="panel-btn danger">Delete Room</button>
+              </div>
+
+              <div id="props-door" style="display:none">
+                <div class="ctrl-row">
+                  <span>Door Type</span>
+                  <select id="prop-door-type">
+                    <option value="open">Open Archway</option>
+                    <option value="door">Door</option>
+                    <option value="locked">Locked Door</option>
+                    <option value="secret">Secret Door</option>
+                    <option value="portcullis">Portcullis</option>
+                  </select>
+                </div>
+                <button id="btn-delete-door" class="panel-btn danger">Delete Door</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── Story Panel (right, lower floating) ── -->
+      <div class="floating-panel" id="panel-story">
+        <div class="panel-titlebar">
+          <h2>Story</h2>
+          <button class="panel-titlebar-btn pin-btn" title="Pin panel" data-pinned="true">📌</button>
+          <button class="panel-titlebar-btn close-btn" title="Close panel">×</button>
+        </div>
+        <div class="panel-body">
+          <div class="collapse-section">
+            <button class="collapse-header">
+              <span class="section-chevron">▾</span> Adventure
+            </button>
+            <div class="collapse-content">
+              <div class="ctrl-row">
+                <span>Name</span>
+                <input type="text" id="story-name" placeholder="Dungeon name…">
+              </div>
+              <div class="ctrl-row">
+                <span>Hook</span>
+                <textarea id="story-hook" rows="3" placeholder="Adventure hook…"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
 
