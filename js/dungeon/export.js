@@ -39,6 +39,25 @@ export function exportAdventureText(dungeon) {
   lines.push('---');
   lines.push('');
 
+  // Story slots
+  if (dungeon.story && Array.isArray(dungeon.story.slots) && dungeon.story.slots.length) {
+    lines.push('## Story Beats');
+    lines.push('');
+    for (const slot of dungeon.story.slots) {
+      const roleName = slot.role ? slot.role.replace(/mid(\d)/, 'Mid $1') : 'Unknown';
+      const room = dungeon.rooms.find(r => r.id === slot.roomId);
+      const roomName = room ? (room.label || `Room ${room.order || '—'}`) : 'Unassigned';
+      lines.push(`### ${roleName} — ${slot.title}`);
+      lines.push('');
+      lines.push(`**Room:** ${roomName}`);
+      lines.push('');
+      lines.push(slot.text || '-');
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+    }
+  }
+
   // Room summary table
   lines.push('## Room Summary');
   lines.push('');

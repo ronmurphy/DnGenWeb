@@ -277,12 +277,17 @@
                   <span>Icon</span>
                   <select id="prop-room-icon">
                     <option value="none">— None —</option>
+                    <option value="start">★ Start</option>
                     <option value="entrance">▲ Entrance</option>
                     <option value="exit">▼ Exit</option>
                     <option value="boss">☠ Boss</option>
                     <option value="treasure">★ Treasure</option>
                     <option value="trap">⚠ Trap</option>
                     <option value="shrine">✝ Shrine</option>
+                    <option value="mid1">① Mid 1</option>
+                    <option value="mid2">② Mid 2</option>
+                    <option value="mid3">③ Mid 3</option>
+                    <option value="arcane">✦ Arcane</option>
                     <option value="arcane">✦ Arcane</option>
                     <option value="prison">⊠ Prison</option>
                     <option value="armory">⚔ Armory</option>
@@ -293,6 +298,17 @@
                     <option value="tavern">◆ Tavern</option>
                     <option value="guard">⊕ Guard Post</option>
                     <option value="puzzle">? Puzzle</option>
+                  </select>
+                </div>
+                <div class="ctrl-row">
+                  <span>Story Role</span>
+                  <select id="prop-room-story-role">
+                    <option value="none">None</option>
+                    <option value="start">Start</option>
+                    <option value="mid1">Mid 1</option>
+                    <option value="mid2">Mid 2</option>
+                    <option value="mid3">Mid 3</option>
+                    <option value="boss">Boss</option>
                   </select>
                 </div>
                 <label class="ctrl-check">
@@ -345,6 +361,10 @@
                 <span>Hook</span>
                 <textarea id="story-hook" rows="3" placeholder="Adventure hook…"></textarea>
               </div>
+              <div class="ctrl-row">
+                <button id="btn-regenerate-story" class="panel-btn">Regenerate Story</button>
+              </div>
+              <div id="story-cards" class="story-cards"></div>
             </div>
           </div>
         </div>

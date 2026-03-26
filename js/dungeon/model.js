@@ -35,6 +35,11 @@ export const ROOM_ICONS = {
   prison:   { label: 'Prison',      symbol: '⊠'  },
   armory:   { label: 'Armory',      symbol: '⚔'  },
   forge:    { label: 'Forge',       symbol: '⚒'  },
+  mid1:     { label: 'Mid 1',       symbol: '①'  },
+  mid2:     { label: 'Mid 2',       symbol: '②'  },
+  mid3:     { label: 'Mid 3',       symbol: '③'  },
+  start:    { label: 'Start',      symbol: '★'  },
+  boss:     { label: 'Boss',       symbol: '☠'  },
   throne:   { label: 'Throne',      symbol: '♛'  },
   crypt:    { label: 'Crypt',       symbol: '✠'  },
   library:  { label: 'Library',     symbol: '≡'  },
@@ -69,6 +74,7 @@ export class Room {
     this.order   = '';       // narrative order label: 'Entry', '1', '2', 'Boss', 'End', etc.
 
     this.doors   = [];   // Door references
+    this.story   = null; // plot element for this room (if assigned)
   }
 
   get cx() {
@@ -155,7 +161,7 @@ export class Room {
     return { id: this.id, x: this.x, y: this.y, w: this.w, h: this.h,
              round: this.round, type: this.type, label: this.label,
              notes: this.notes, water: this.water, icon: this.icon, order: this.order,
-             points: this.points, mergeGroup: this.mergeGroup };
+             points: this.points, mergeGroup: this.mergeGroup, story: this.story };
   }
 
   static fromJSON(d) {
@@ -165,6 +171,7 @@ export class Room {
     r.water = d.water; r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
     r.points = d.points ?? null;
     r.mergeGroup = d.mergeGroup ?? null;
+    r.story = d.story ?? null;
     return r;
   }
 }
@@ -210,6 +217,7 @@ export class Dungeon {
     this.hook  = '';
     this.rooms = [];
     this.doors = [];
+    this.story = { slots: [], locked: [] };
   }
 
   addRoom(room) {
@@ -258,6 +266,7 @@ export class Dungeon {
       seed: this.seed, name: this.name, hook: this.hook,
       rooms: this.rooms.map(r => r.toJSON()),
       doors: this.doors.map(d => d.toJSON()),
+      story: this.story,
     };
   }
 
@@ -277,6 +286,7 @@ export class Dungeon {
       door.type = dd.type;
       d.doors.push(door);
     }
+    d.story = data.story ?? { slots: [], locked: [] };
     return d;
   }
 }

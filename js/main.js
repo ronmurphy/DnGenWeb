@@ -4,11 +4,13 @@
  */
 import { Dungeon, DOOR_TYPE, ROOM_TYPE } from './dungeon/model.js';
 import { Renderer } from './dungeon/renderer.js';
+import { RNG } from './utils/random.js';
 import { generator, bspGenerator, classicGenerator } from './dungeon/generator.js';
 import { Editor } from './ui/editor.js';
 import { Style, ShadingConfig } from './dungeon/shading.js';
 import { initDraggablePanels } from './ui/utility.js';
 import { exportAdventureText } from './dungeon/export.js';
+import { loadStoryTemplates, generateDungeonStory, regenerateDungeonStory } from './story.js';
 
 // ── Undo / Redo ───────────────────────────────────────────────────────────────
 
@@ -29,6 +31,7 @@ function _restoreHistory(json) {
   editor.setDungeon(dungeon);
   document.getElementById('story-name').value = dungeon.name;
   document.getElementById('story-hook').value = dungeon.hook;
+  renderStoryCards();
   render();
 }
 
@@ -434,8 +437,10 @@ document.getElementById('btn-generate').addEventListener('click', () => {
   const gen    = GENERATORS[method] ?? generator;
   dungeon = gen.generate(seed, size ? [size] : []);
   editor.setDungeon(dungeon);
+  generateDungeonStory(dungeon, new RNG(dungeon.seed));
   document.getElementById('story-name').value = dungeon.name;
   document.getElementById('story-hook').value = dungeon.hook;
+  renderStoryCards();
   _centerView();
   pushHistory();
   render();
@@ -447,6 +452,8 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   const seed = parseInt(document.getElementById('input-seed').value, 10) || 12345;
   dungeon = new Dungeon(seed);
   editor.setDungeon(dungeon);
+  dungeon.story = { slots: [], locked: [] };
+  renderStoryCards();
   pushHistory();
   render();
 });
@@ -499,6 +506,7 @@ document.getElementById('input-load-json').addEventListener('change', e => {
       editor.setDungeon(dungeon);
       document.getElementById('story-name').value = dungeon.name;
       document.getElementById('story-hook').value = dungeon.hook;
+      renderStoryCards();
       pushHistory();
       _centerView();
       render();
@@ -596,6 +604,64 @@ document.querySelectorAll('.ctrl-slider input[type="range"]').forEach(slider => 
 //  STORY CONTROLS
 // ══════════════════════════════════════════════════════════════════════════════
 
+function renderStoryCards() {
+  const container = document.getElementById('story-cards');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!dungeon.story || !dungeon.story.slots) return;
+
+  dungeon.story.slots.forEach((slot, index) => {
+    const card = document.createElement('div');
+    card.className = 'story-card';
+
+    const heading = document.createElement('h3');
+    heading.textContent = `${index === 0 ? 'Start' : index === 4 ? 'Boss' : 'Mid '+index}`;
+    card.appendChild(heading);
+
+    const title = document.createElement('p');
+    title.textContent = slot.title;
+    card.appendChild(title);
+
+    const desc = document.createElement('p');
+    desc.textContent = slot.text;
+    card.appendChild(desc);
+
+    const lockRow = document.createElement('div');
+    lockRow.className = 'lock-row';
+    const lockInput = document.createElement('input');
+    lockInput.type = 'checkbox';
+    lockInput.checked = slot.locked || false;
+    lockInput.addEventListener('change', e => {
+      dungeon.story.locked[index] = e.target.checked;
+      slot.locked = e.target.checked;
+    });
+    const lockLabel = document.createElement('label');
+    lockLabel.textContent = 'Lock';
+    lockLabel.prepend(lockInput);
+
+    const assignBtn = document.createElement('button');
+    assignBtn.className = 'panel-btn';
+    assignBtn.textContent = 'Assign to selected room';
+    assignBtn.style.marginLeft = 'auto';
+    assignBtn.addEventListener('click', () => {
+      if (!renderer.selectedRoom) {
+        alert('Select a room first to assign this story role.');
+        return;
+      }
+      setRoomStoryRole(renderer.selectedRoom, slot.role);
+      document.getElementById('prop-room-story-role').value = slot.role;
+      pushHistory();
+    });
+
+    lockRow.appendChild(lockLabel);
+    lockRow.appendChild(assignBtn);
+
+    card.appendChild(lockRow);
+    container.appendChild(card);
+  });
+}
+
 document.getElementById('story-name').addEventListener('input', e => {
   dungeon.name = e.target.value;
   const titleEl = document.getElementById('menubar-title');
@@ -603,6 +669,12 @@ document.getElementById('story-name').addEventListener('input', e => {
 });
 document.getElementById('story-hook').addEventListener('input', e => {
   dungeon.hook = e.target.value;
+});
+
+document.getElementById('btn-regenerate-story').addEventListener('click', () => {
+  regenerateDungeonStory(dungeon, new RNG(Date.now()));
+  renderStoryCards();
+  pushHistory();
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -627,8 +699,43 @@ function showPropsRoom(room) {
   document.getElementById('prop-room-order').value    = room.order ?? '';
   document.getElementById('prop-room-type').value     = room.type  ?? 'normal';
   document.getElementById('prop-room-icon').value     = room.icon  ?? 'none';
+  document.getElementById('prop-room-story-role').value = room.story?.role ?? 'none';
   document.getElementById('prop-room-water').checked  = room.water ?? false;
   document.getElementById('prop-room-notes').value    = room.notes ?? '';
+}
+
+function setRoomStoryRole(room, role) {
+  if (!room || !dungeon || !dungeon.story) return;
+
+  // Clear any existing slot that references this room
+  dungeon.story.slots = dungeon.story.slots.map(slot => {
+    if (slot.roomId === room.id) return { ...slot, roomId: null };
+    return slot;
+  });
+
+  if (role && role !== 'none') {
+    let targetSlot = dungeon.story.slots.find(slot => slot.role === role);
+    if (!targetSlot) {
+      const title = role === 'start' ? 'Start' : role === 'boss' ? 'Boss' : role.toUpperCase();
+      targetSlot = { role, roomId: room.id, title, text: '', locked: false };
+      dungeon.story.slots.push(targetSlot);
+    } else {
+      targetSlot.roomId = room.id;
+    }
+    room.story = { role: targetSlot.role, title: targetSlot.title, text: targetSlot.text };
+  } else {
+    room.story = null;
+  }
+
+  // sync all room story payloads to slot mapping
+  dungeon.rooms.forEach(r => {
+    const slot = dungeon.story.slots.find(s => s.roomId === r.id);
+    if (slot) r.story = { role: slot.role, title: slot.title, text: slot.text };
+    else if (r !== room) r.story = null;
+  });
+
+  renderStoryCards();
+  render();
 }
 
 function showPropsDoor(door) {
@@ -657,6 +764,9 @@ document.getElementById('prop-room-type').addEventListener('change', e => {
 });
 document.getElementById('prop-room-icon').addEventListener('change', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.icon = e.target.value; render(); }
+});
+document.getElementById('prop-room-story-role').addEventListener('change', e => {
+  if (renderer.selectedRoom) { setRoomStoryRole(renderer.selectedRoom, e.target.value); pushHistory(); }
 });
 document.getElementById('prop-room-water').addEventListener('change', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.water = e.target.checked; render(); }
@@ -706,8 +816,11 @@ syncStyle();
 // Generate a default dungeon on load
 dungeon = generator.generate(12345, []);
 editor.setDungeon(dungeon);
-document.getElementById('story-name').value = dungeon.name;
-document.getElementById('story-hook').value = dungeon.hook;
+await loadStoryTemplates();
+generateDungeonStory(dungeon, new RNG(dungeon.seed));
+if (document.getElementById('story-name')) document.getElementById('story-name').value = dungeon.name;
+if (document.getElementById('story-hook')) document.getElementById('story-hook').value = dungeon.hook;
+renderStoryCards();
 _centerView();
 render();
 pushHistory();

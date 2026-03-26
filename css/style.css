@@ -184,10 +184,38 @@ html, body {
   text-align: center;
   flex-shrink: 0;
 }
-.menu-dropdown button[data-checked="false"]::before {
+..menu-dropdown button[data-checked="false"]::before {
   content: '';
   width: 16px;
   flex-shrink: 0;
+}
+
+.story-cards {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.story-card {
+  background: rgba(45, 45, 70, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+.story-card h3 {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.story-card p {
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+.story-card .lock-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
 }
 
 /* Menubar spacer & right section */

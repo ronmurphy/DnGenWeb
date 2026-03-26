@@ -822,6 +822,17 @@ export class Renderer {
         ctx.fillText(room.order, ox, oy);
         ctx.textAlign = 'center';
       }
+
+      // Story role indicator top-right
+      if (room.story && room.story.role) {
+        const roleSym = ROOM_ICONS[room.story.role]?.symbol || room.story.role.toUpperCase();
+        ctx.font = `bold ${Math.min(cs * 0.35, 11)}px system-ui, sans-serif`;
+        ctx.textAlign = 'right';
+        const rx = (room.x + room.w) * cs - 3;
+        const ry = room.y * cs + cs * 0.4;
+        ctx.fillText(roleSym, rx, ry);
+        ctx.textAlign = 'center';
+      }
     }
     ctx.globalAlpha = 1;
   }

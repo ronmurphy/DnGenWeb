@@ -1,0 +1,25 @@
+{
+  "start": [
+    {"title": "An Ominous Beginning", "text": "The path ahead is shrouded in mist and whispers of something old and hungry."},
+    {"title": "Ruined Gates", "text": "The broken gate creaks as you step into a place forgotten by time."},
+    {"title": "Farewell to Safety", "text": "The last town buildings vanish behind you; only the dungeon remains."}
+  ],
+  "mid": [
+    {"title": "Echoing Corridors", "text": "You hear distant footsteps and the scrape of something that shouldn't exist."},
+    {"title": "Flickering Torches", "text": "Strange runes glow briefly on the walls. You feel watched."},
+    {"title": "Collapsed Passage", "text": "A recent collapse blocks the usual path. A hidden tunnel beckons."},
+    {"title": "Guardian Remains", "text": "Broken armor and spells suggest this place once held a powerful guardian."},
+    {"title": "Cursed Relic", "text": "A discarded idol radiates dark energy. It may be the key to the boss."},
+    {"title": "Trick of Mirrors", "text": "Illusions dance at the edge of your vision, making the walls seem alive."},
+    {"title": "Poisonous Fumes", "text": "The air is thick with unnatural spores; each breath drains your strength."},
+    {"title": "Forgotten Library", "text": "Dusty tomes whisper secrets of the dungeon’s creation when touched."},
+    {"title": "Telltale Blood", "text": "A trail of blood leads deeper; its source is not human."}
+  ],
+  "boss": [
+    {"title": "Throne of Shadows", "text": "You stand before a dark throne. The boss waits with blood-red eyes."},
+    {"title": "Heart of the Dungeon", "text": "A pulsating core of corrupt magic fills the chamber; the final battle begins."},
+    {"title": "The Last Stand", "text": "Ancient guardians fell here. They whisper one last warning before you fight."},
+    {"title": "Dragon’s Lair", "text": "Heat and smoke tear at your nostrils, and the actual boss roars in the dark."},
+    {"title": "Crowned Champion", "text": "A fallen knight rises as the boss, fueled by your approach."}
+  ]
+}
