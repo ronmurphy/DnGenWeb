@@ -6,6 +6,7 @@ import { Dungeon, DOOR_TYPE, ROOM_TYPE } from './dungeon/model.js';
 import { Renderer } from './dungeon/renderer.js';
 import { RNG } from './utils/random.js';
 import { generator, bspGenerator, classicGenerator } from './dungeon/generator.js';
+import { cavesGenerator } from './dungeon/caves.js';
 import { Editor } from './ui/editor.js';
 import { Style, ShadingConfig } from './dungeon/shading.js';
 import { initDraggablePanels } from './ui/utility.js';
@@ -428,6 +429,7 @@ const GENERATORS = {
   organic: generator,
   bsp:     bspGenerator,
   classic: classicGenerator,
+  caves:   cavesGenerator,
 };
 
 document.getElementById('btn-generate').addEventListener('click', () => {

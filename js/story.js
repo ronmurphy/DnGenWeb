@@ -80,6 +80,9 @@ export function generateDungeonStory(dungeon, rng) {
       locked: dungeon.story.locked[index] || false
     };
     room.story = { title, text, role };
+    if (['start','mid1','mid2','mid3','boss'].includes(role)) {
+      room.icon = role;
+    }
     return slot;
   });
 

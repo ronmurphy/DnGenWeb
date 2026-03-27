@@ -853,9 +853,9 @@ export class Renderer {
 
     for (const room of dungeon.rooms) {
       if (room.hidden) continue;
-      const iconKey = (room.icon && room.icon !== 'none')
-        ? room.icon
-        : (Renderer._TYPE_ICONS[room.type] ?? null);
+      let iconKey = null;
+      if (room.story?.role) iconKey = room.story.role;
+      if (!iconKey) iconKey = (room.icon && room.icon !== 'none') ? room.icon : (Renderer._TYPE_ICONS[room.type] ?? null);
       if (iconKey && ROOM_ICONS[iconKey]?.symbol) {
         usedIcons.set(iconKey, ROOM_ICONS[iconKey]);
       }
