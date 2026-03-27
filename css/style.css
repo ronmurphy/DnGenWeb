@@ -720,3 +720,78 @@ html, body {
 @media (max-width: 1200px) {
   :root { --panel-w: 190px; }
 }
+
+/* ╔══════════════════════════════════════════════════════════════════════════╗
+   ║  TOUCH / TABLET                                                        ║
+   ╚══════════════════════════════════════════════════════════════════════════╝ */
+
+/* Prevent browser gestures on the canvas — we handle everything ourselves */
+#canvas-area,
+#dungeon-canvas {
+  touch-action: none;
+}
+
+/* Coarse pointer = finger / stylus — enlarge touch targets */
+@media (pointer: coarse) {
+  :root {
+    --topbar-h: 44px;
+    --rail-w: 52px;
+  }
+
+  /* Menubar */
+  #menubar { padding: 0 6px; gap: 1px; }
+  .menu-item > .menu-trigger { padding: 8px 12px; font-size: 13px; }
+  .menu-dropdown button,
+  .menu-dropdown label { padding: 10px 12px; font-size: 13px; }
+
+  /* Tool rail — larger buttons */
+  #tool-rail { padding: 5px; gap: 3px; }
+  #tool-rail .tool-btn {
+    width: 44px; height: 44px;
+    font-size: 18px;
+  }
+  #tool-rail .tool-btn .material-symbols-outlined { font-size: 22px; }
+  #tool-rail .rail-separator { width: 36px; margin: 4px auto; }
+
+  /* Panel titlebar buttons need to be tappable */
+  .panel-titlebar { padding: 8px 10px; }
+  .panel-titlebar-btn { width: 30px; height: 30px; font-size: 16px; }
+
+  /* Panel controls — larger inputs and buttons */
+  .panel-body select,
+  .panel-body input[type="text"],
+  .panel-body input[type="number"],
+  .panel-body textarea { font-size: 14px; padding: 6px 8px; }
+  .panel-btn { padding: 8px 10px; font-size: 13px; }
+  .ctrl-check { padding: 4px 0; font-size: 13px; }
+  .ctrl-check input[type="checkbox"] { width: 18px; height: 18px; }
+
+  /* Collapse headers need bigger tap area */
+  .collapse-header { padding: 8px; font-size: 12px; }
+
+  /* Status bar */
+  #status-bar { font-size: 12px; height: 28px; }
+}
+
+/* Tablet-sized screens — stack panels differently */
+@media (max-width: 900px) {
+  :root { --panel-w: 200px; }
+
+  /* Shift style panel below the taller rail */
+  #panel-style { left: 8px; top: auto; bottom: 36px; }
+
+  /* Panels can go max 45vh so they don't eat the canvas */
+  .panel-body { max-height: 40vh; }
+}
+
+/* Small tablets / large phones — collapse panels narrower */
+@media (max-width: 600px) {
+  :root { --panel-w: 170px; }
+
+  .floating-panel { border-radius: var(--radius-sm); }
+  .panel-body { max-height: 35vh; }
+
+  /* Hide the menubar title to save space */
+  .menubar-title { display: none !important; }
+  .menubar-stats { display: none !important; }
+}

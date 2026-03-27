@@ -47,6 +47,15 @@ export class Editor {
     this._movePropStart  = null;   // { x, y } original prop position
     this._movePropDrag   = null;   // { x, y } grid at drag start
 
+    // Touch state
+    this._touchStartTime = null;
+    this._touchStartPos  = null;
+    this._touchMoved     = false;
+    this._longPressTimer = null;
+    this._lastTapTime    = 0;
+    this._pinchMid       = null;
+    this._isTouch        = matchMedia('(pointer: coarse)').matches;
+
     // Modifier keys state
     this._shiftKey = false;
     this._bindEvents();
@@ -213,8 +222,8 @@ export class Editor {
       }
       case 'select': {
         const g = this._toGrid(mx, my);
-        // Check if clicking on a prop first (small hit target, higher priority)
-        const clickedProp = this.dungeon.propAt(g.x, g.y);
+        // Check if clicking on a prop first (larger radius on touch)
+        const clickedProp = this.dungeon.propAt(g.x, g.y, this._isTouch ? 1.0 : 0.6);
         if (clickedProp && clickedProp === this.renderer.selectedProp) {
           // Start moving the selected prop
           this._movingProp    = true;
@@ -456,11 +465,12 @@ export class Editor {
   }
 
   _doorAtScreenPos(mx, my) {
+    const hitDist = this._isTouch ? 24 : 12;
     for (const door of this.dungeon.doors) {
       const dpx = this.renderer.gx(door.x);
       const dpy = this.renderer.gy(door.y);
       const dist = Math.hypot(mx - dpx, my - dpy);
-      if (dist < 12) return door;
+      if (dist < hitDist) return door;
     }
     return null;
   }
@@ -494,33 +504,130 @@ export class Editor {
 
   _onTouchStart(e) {
     e.preventDefault();
+
     if (e.touches.length === 1) {
       const t = e.touches[0];
-      const r = this.canvas.getBoundingClientRect();
+      this._touchStartTime = Date.now();
+      this._touchStartPos  = { x: t.clientX, y: t.clientY };
+
+      // Detect double-tap (two taps within 300ms)
+      if (this._lastTapTime && Date.now() - this._lastTapTime < 300) {
+        clearTimeout(this._longPressTimer);
+        this._onDoubleClick({ clientX: t.clientX, clientY: t.clientY });
+        this._lastTapTime = 0;
+        return;
+      }
+
+      // Start long-press timer (500ms hold = delete)
+      this._longPressTimer = setTimeout(() => {
+        if (!this._touchMoved) {
+          this._onLongPress(t.clientX, t.clientY);
+        }
+      }, 500);
+      this._touchMoved = false;
+
       this._onMouseDown({ button: 0, clientX: t.clientX, clientY: t.clientY,
                           altKey: false, preventDefault: () => {} });
     } else if (e.touches.length === 2) {
+      // Cancel any single-finger actions in progress
+      clearTimeout(this._longPressTimer);
+      this._dragging = false;
+      this._movingRoom = false;
+      this._movingProp = false;
+
       this._pinchDist = this._touchDist(e.touches);
+      this._pinchMid  = this._touchMidpoint(e.touches);
     }
   }
 
   _onTouchMove(e) {
     e.preventDefault();
+
     if (e.touches.length === 1) {
       const t = e.touches[0];
+      // If finger moved more than 10px, cancel long-press
+      if (this._touchStartPos) {
+        const d = Math.hypot(t.clientX - this._touchStartPos.x, t.clientY - this._touchStartPos.y);
+        if (d > 10) {
+          this._touchMoved = true;
+          clearTimeout(this._longPressTimer);
+        }
+      }
       this._onMouseMove({ clientX: t.clientX, clientY: t.clientY });
-    } else if (e.touches.length === 2 && this._pinchDist) {
+    } else if (e.touches.length === 2) {
       const d = this._touchDist(e.touches);
-      const { mx, my } = this._touchMidpoint(e.touches);
-      this._zoomAt(mx, my, d / this._pinchDist);
-      this._pinchDist = d;
+      const mid = this._touchMidpoint(e.touches);
+
+      // Pinch zoom
+      if (this._pinchDist) {
+        this._zoomAt(mid.mx, mid.my, d / this._pinchDist);
+        this._pinchDist = d;
+      }
+
+      // Two-finger pan
+      if (this._pinchMid) {
+        const dx = (mid.mx - this._pinchMid.mx) / this.renderer.zoom;
+        const dy = (mid.my - this._pinchMid.my) / this.renderer.zoom;
+        this.renderer.panX += dx;
+        this.renderer.panY += dy;
+        this.onUpdate();
+      }
+      this._pinchMid = mid;
     }
   }
 
   _onTouchEnd(e) {
+    clearTimeout(this._longPressTimer);
+
     if (e.touches.length === 0) {
       this._onMouseUp({ clientX: 0, clientY: 0 });
       this._pinchDist = null;
+      this._pinchMid  = null;
+
+      // Record tap time for double-tap detection
+      if (!this._touchMoved && this._touchStartTime) {
+        this._lastTapTime = Date.now();
+      }
+      this._touchStartTime = null;
+      this._touchStartPos  = null;
+    }
+  }
+
+  /** Long-press: delete prop/door/room under finger. */
+  _onLongPress(clientX, clientY) {
+    const { mx, my } = { mx: clientX - this.canvas.getBoundingClientRect().left,
+                          my: clientY - this.canvas.getBoundingClientRect().top };
+    const g = this._toGrid(mx, my);
+
+    // Try to delete prop, then door, then room
+    const prop = this.dungeon.propAt(g.x, g.y);
+    if (prop) {
+      if (this.renderer.selectedProp === prop) this.renderer.selectedProp = null;
+      this.dungeon.removeProp(prop);
+      this.onUpdate(); this.onChanged?.();
+      // Cancel the ongoing drag
+      this._dragging = false;
+      this._movingProp = false;
+      return;
+    }
+
+    for (const door of this.dungeon.doors) {
+      const dist = Math.hypot(g.x - door.x, g.y - door.y);
+      if (dist < 1) {
+        if (this.renderer.selectedDoor === door) this.renderer.selectedDoor = null;
+        this.dungeon.removeDoor(door);
+        this.onUpdate(); this.onChanged?.();
+        this._dragging = false;
+        return;
+      }
+    }
+
+    const room = this.dungeon.roomAt(g.x, g.y);
+    if (room) {
+      if (this.renderer.selectedRoom === room) this.renderer.selectedRoom = null;
+      this.dungeon.removeRoom(room);
+      this.onUpdate(); this.onChanged?.();
+      this._dragging = false;
     }
   }
 
@@ -556,8 +663,9 @@ export class Editor {
   _selectAt(mx, my) {
     const g = this._toGrid(mx, my);
 
-    // Check props first (smallest hit area)
-    const prop = this.dungeon.propAt(g.x, g.y);
+    // Check props first (smallest hit area, larger radius on touch)
+    const propRadius = this._isTouch ? 1.0 : 0.6;
+    const prop = this.dungeon.propAt(g.x, g.y, propRadius);
     if (prop) {
       this.renderer.selectedProp = prop;
       this.renderer.selectedDoor = null;
@@ -567,12 +675,13 @@ export class Editor {
       return;
     }
 
-    // Check doors (small hit area)
+    // Check doors (larger hit area on touch)
+    const doorHitDist = this._isTouch ? 24 : 12;
     for (const door of this.dungeon.doors) {
       const dpx = this.renderer.gx(door.x);
       const dpy = this.renderer.gy(door.y);
       const dist = Math.hypot(mx - dpx, my - dpy);
-      if (dist < 12) {
+      if (dist < doorHitDist) {
         this.renderer.selectedDoor = door;
         this.renderer.selectedRoom = null;
         this.renderer.selectedProp = null;
