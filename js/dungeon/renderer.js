@@ -164,6 +164,7 @@ export class Renderer {
   // ── Water ──────────────────────────────────────────────────────────────────
 
   _drawWater(ctx, dungeon, cs) {
+<<<<<<< HEAD
     ctx.fillStyle = Style.water;
     ctx.globalAlpha = 0.55;
     ctx.beginPath();
@@ -173,6 +174,140 @@ export class Renderer {
     }
     ctx.fill('nonzero');
     ctx.globalAlpha = 1;
+=======
+    for (const room of dungeon.rooms) {
+      if (!room.water || room.hidden) continue;
+
+      // 1. Solid fill
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = Style.water;
+      ctx.beginPath();
+      this._roomPath(ctx, room, cs);
+      ctx.fill();
+      ctx.restore();
+
+      // 2. Clip to room for ripple lines
+      ctx.save();
+      ctx.beginPath();
+      this._roomPath(ctx, room, cs);
+      ctx.clip();
+
+      // Seeded RNG for deterministic ripple dashes per room
+      const rng = new RNG(room.id * 7919);
+
+      // 3. Ripple layers — dashed inset paths
+      const layers = [
+        { inset: 0.15, alpha: 0.38, width: Style.normal },
+        { inset: 0.35, alpha: 0.28, width: Style.stroke },
+        { inset: 0.6,  alpha: 0.18, width: Style.thin   },
+      ];
+      for (const layer of layers) {
+        const dash = this._waterDash(rng, cs);
+        ctx.strokeStyle = Style.ink;
+        ctx.globalAlpha = layer.alpha;
+        ctx.lineWidth   = layer.width;
+        ctx.setLineDash(dash);
+        ctx.lineDashOffset = rng.float(0, cs);
+        ctx.beginPath();
+        this._insetRoomPath(ctx, room, cs, layer.inset * cs);
+        ctx.stroke();
+      }
+
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  /** Generate a randomised dash pattern for water ripples. */
+  _waterDash(rng, cs) {
+    const dash = [];
+    for (let i = 0; i < 6; i++) {
+      dash.push(rng.float(0.3, 1.2) * cs);   // dash length
+      dash.push(rng.float(0.2, 0.8) * cs);   // gap length
+    }
+    return dash;
+  }
+
+  /** Trace an inset copy of a room path (shrunk toward centre by `d` pixels). */
+  _insetRoomPath(ctx, room, cs, d) {
+    if (room.points && room.points.length >= 3) {
+      // Polygon — inset each edge along its inward normal, intersect adjacent edges
+      const pts = room.points.map(p => ({ x: p.x * cs, y: p.y * cs }));
+      const n = pts.length;
+      // Compute inward-offset edges
+      const edges = [];
+      for (let i = 0; i < n; i++) {
+        const a = pts[i], b = pts[(i + 1) % n];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        // Inward normal (assuming CW winding; we'll check & flip if needed)
+        const nx = -dy / len, ny = dx / len;
+        edges.push({ ax: a.x + nx * d, ay: a.y + ny * d,
+                      bx: b.x + nx * d, by: b.y + ny * d });
+      }
+      // Check winding — if inset goes outward, flip
+      if (edges.length > 0) {
+        const area = this._signedArea(pts);
+        if (area > 0) {
+          // CCW winding — flip normals
+          for (let i = 0; i < n; i++) {
+            const a = pts[i], b = pts[(i + 1) % n];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = dy / len, ny = -dx / len;
+            edges[i] = { ax: a.x + nx * d, ay: a.y + ny * d,
+                         bx: b.x + nx * d, by: b.y + ny * d };
+          }
+        }
+      }
+      // Intersect consecutive offset edges to get inset vertices
+      const inset = [];
+      for (let i = 0; i < n; i++) {
+        const e1 = edges[i], e2 = edges[(i + 1) % n];
+        const pt = this._lineIntersect(e1.ax, e1.ay, e1.bx, e1.by,
+                                        e2.ax, e2.ay, e2.bx, e2.by);
+        if (pt) inset.push(pt);
+        else inset.push({ x: e1.bx, y: e1.by }); // fallback: parallel edges
+      }
+      if (inset.length >= 3) {
+        ctx.moveTo(inset[0].x, inset[0].y);
+        for (let i = 1; i < inset.length; i++) ctx.lineTo(inset[i].x, inset[i].y);
+        ctx.closePath();
+      }
+    } else if (room.round) {
+      const r = Math.max(0, (room.w / 2) * cs - d);
+      if (r > 0) ctx.arc(room.cx * cs, room.cy * cs, r, 0, Math.PI * 2);
+    } else {
+      // Rectangle — shrink by d on each side
+      const x = room.x * cs + d;
+      const y = room.y * cs + d;
+      const w = room.w * cs - 2 * d;
+      const h = room.h * cs - 2 * d;
+      if (w > 0 && h > 0) {
+        const r = Math.min(4, w / 4, h / 4);
+        ctx.roundRect(x, y, w, h, r);
+      }
+    }
+  }
+
+  /** Signed area of a polygon (positive = CCW). */
+  _signedArea(pts) {
+    let area = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const j = (i + 1) % n;
+      area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    }
+    return area / 2;
+  }
+
+  /** Intersect two lines (a1→a2) and (b1→b2). Returns {x,y} or null. */
+  _lineIntersect(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
+    const d = (a1x - a2x) * (b1y - b2y) - (a1y - a2y) * (b1x - b2x);
+    if (Math.abs(d) < 1e-10) return null;
+    const t = ((a1x - b1x) * (b1y - b2y) - (a1y - b1y) * (b1x - b2x)) / d;
+    return { x: a1x + t * (a2x - a1x), y: a1y + t * (a2y - a1y) };
+>>>>>>> 84f7cb8 (feat: enhance water rendering with ripple effects and inset room paths)
   }
 
   // ── Walls ──────────────────────────────────────────────────────────────────
