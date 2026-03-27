@@ -573,6 +573,7 @@ function syncStyle() {
   renderer.mergeRooms     = document.getElementById('chk-merge').checked;
   renderer.showLegend     = document.getElementById('chk-legend').checked;
   renderer.showGraphPaper = document.getElementById('chk-graph-paper').checked;
+  renderer.useWebGlyphs   = document.getElementById('chk-web-glyphs').checked;
 
   renderer.cellSize = parseInt(document.getElementById('cell-size').value, 10);
 

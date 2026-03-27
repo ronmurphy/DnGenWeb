@@ -45,6 +45,7 @@ export class Renderer {
     this.mergeRooms   = false;
     this.showLegend   = true;
     this.showGraphPaper = false;
+    this.useWebGlyphs  = false;
     this.showResizeHandles = false;
     this.hoverResizeHandle = null;
   }
@@ -559,7 +560,7 @@ export class Renderer {
       ctx.rotate(prop.rotation);
       ctx.strokeStyle = Style.ink;
       ctx.lineWidth   = Style.normal;
-      this._drawPropShape(ctx, prop.type, cs);
+      this._drawPropAny(ctx, prop.type, cs);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -572,7 +573,7 @@ export class Renderer {
       ctx.rotate(this.ghostProp.rotation);
       ctx.strokeStyle = Style.ink;
       ctx.lineWidth = Style.normal;
-      this._drawPropShape(ctx, this.ghostProp.type, cs);
+      this._drawPropAny(ctx, this.ghostProp.type, cs);
       ctx.restore();
       ctx.globalAlpha = 1;
     }
@@ -593,6 +594,43 @@ export class Renderer {
   }
 
   // ── Prop shape drawing ────────────────────────────────────────────────────
+
+  // Material Symbols Outlined icon names for each prop type
+  static _PROP_GLYPHS = {
+    table:     'table_restaurant',
+    chair:     'chair',
+    bed:       'bed',
+    chest:     'inventory_2',
+    barrel:    'propane_tank',
+    bookshelf: 'auto_stories',
+    altar:     'church',
+    stairs:    'stairs',
+  };
+
+  static _PROP_LABELS = {
+    table: 'Table', chair: 'Chair', bed: 'Bed', chest: 'Chest',
+    barrel: 'Barrel', bookshelf: 'Bookshelf', altar: 'Altar', stairs: 'Stairs',
+  };
+
+  /** Draw a Material Symbols icon centred at (0,0). */
+  _drawMaterialIcon(ctx, iconName, size) {
+    ctx.save();
+    ctx.font = `${size}px "Material Symbols Outlined"`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = Style.ink;
+    ctx.fillText(iconName, 0, 0);
+    ctx.restore();
+  }
+
+  _drawPropAny(ctx, type, size) {
+    if (this.useWebGlyphs) {
+      const glyph = Renderer._PROP_GLYPHS[type] ?? 'category';
+      this._drawMaterialIcon(ctx, glyph, size * 0.7);
+    } else {
+      this._drawPropShape(ctx, type, size);
+    }
+  }
 
   _drawPropShape(ctx, type, size) {
     const s = size * 0.4;  // half-size unit
@@ -1330,7 +1368,7 @@ export class Renderer {
   _drawLegend(ctx, dungeon) {
     const usedIcons = new Map(); // key → { label, symbol }
     const usedDoors = new Map(); // type → label
-    const usedProps = new Map(); // type → { label, symbol }
+    const usedProps = new Map(); // type → label
 
     const doorLabels = {
       open: 'Open Archway', door: 'Door', locked: 'Locked Door',
@@ -1340,15 +1378,6 @@ export class Renderer {
     const doorSymbols = {
       open: 'O', door: '▭', locked: '⊡', secret: 'S', portcullis: '≡',
       stairs_up: '↑', stairs_down: '↓',
-    };
-
-    const propLabels = {
-      table: 'Table', chair: 'Chair', bed: 'Bed', chest: 'Chest',
-      barrel: 'Barrel', bookshelf: 'Bookshelf', altar: 'Altar', stairs: 'Stairs',
-    };
-    const propSymbols = {
-      table: '╥', chair: '╔', bed: '⊟', chest: '▣',
-      barrel: '◎', bookshelf: '≡', altar: '⊞', stairs: '⋮',
     };
 
     for (const room of dungeon.rooms) {
@@ -1367,7 +1396,7 @@ export class Renderer {
     }
     for (const prop of dungeon.props) {
       if (!usedProps.has(prop.type)) {
-        usedProps.set(prop.type, { label: propLabels[prop.type] ?? prop.type, symbol: propSymbols[prop.type] ?? '?' });
+        usedProps.set(prop.type, Renderer._PROP_LABELS[prop.type] ?? prop.type);
       }
     }
 
@@ -1376,7 +1405,7 @@ export class Renderer {
     const items = [];
     for (const [, info] of usedIcons) items.push({ symbol: info.symbol, label: info.label });
     for (const [, info] of usedDoors) items.push({ symbol: info.symbol, label: info.label });
-    for (const [, info] of usedProps) items.push({ symbol: info.symbol, label: info.label });
+    for (const [type, label] of usedProps) items.push({ propType: type, label });
 
     const pad    = 8;
     const lh     = 16;
@@ -1419,12 +1448,36 @@ export class Renderer {
     ctx.font = `${fs}px system-ui, sans-serif`;
     items.forEach((item, i) => {
       const iy = by + pad + lh + lh * (i + 0.5) + 4;
-      ctx.fillStyle    = Style.ink;
-      ctx.textAlign    = 'center';
-      ctx.font         = `bold ${fs}px system-ui, sans-serif`;
-      ctx.fillText(item.symbol, bx + pad + symW / 2, iy);
-      ctx.textAlign    = 'left';
-      ctx.font         = `${fs}px system-ui, sans-serif`;
+      const symX = bx + pad + symW / 2;
+
+      if (item.propType) {
+        // Prop entry — draw mini shape or material icon
+        ctx.save();
+        ctx.translate(symX, iy);
+        if (this.useWebGlyphs) {
+          const glyph = Renderer._PROP_GLYPHS[item.propType] ?? 'category';
+          ctx.font = `${fs + 2}px "Material Symbols Outlined"`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = Style.ink;
+          ctx.fillText(glyph, 0, 0);
+        } else {
+          ctx.strokeStyle = Style.ink;
+          ctx.lineWidth = 0.8;
+          this._drawPropShape(ctx, item.propType, fs * 1.2);
+        }
+        ctx.restore();
+      } else {
+        // Icon/door entry — text symbol
+        ctx.fillStyle = Style.ink;
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${fs}px system-ui, sans-serif`;
+        ctx.fillText(item.symbol, symX, iy);
+      }
+
+      ctx.fillStyle = Style.ink;
+      ctx.textAlign = 'left';
+      ctx.font = `${fs}px system-ui, sans-serif`;
       ctx.fillText(item.label, bx + pad + symW + 2, iy);
     });
 

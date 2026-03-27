@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dungeon Designer</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0">
 </head>
 <body>
 
@@ -52,6 +53,7 @@
           <button data-toggle-opt="chk-merge" data-checked="false">Merge Rooms</button>
           <button data-toggle-opt="chk-legend" data-checked="true">Legend</button>
           <button data-toggle-opt="chk-graph-paper" data-checked="true">Graph Paper</button>
+          <button data-toggle-opt="chk-web-glyphs" data-checked="false">Web Glyphs</button>
           <button id="btn-resize" data-checked="false">Resize Rooms</button>
           <div class="menu-sep"></div>
           <button id="btn-reset-layout">Reset Panel Layout</button>
@@ -118,14 +120,14 @@
         <button class="tool-btn" data-tool="door" data-tooltip="Place Door (D)">⊞</button>
         <button class="tool-btn" data-tool="erase" data-tooltip="Erase (E)">✕</button>
         <div class="rail-separator"></div>
-        <button class="tool-btn" data-tool="prop-table" data-tooltip="Table (1)">🪑</button>
-        <button class="tool-btn" data-tool="prop-chair" data-tooltip="Chair (2)">💺</button>
-        <button class="tool-btn" data-tool="prop-bed" data-tooltip="Bed (3)">🛏</button>
-        <button class="tool-btn" data-tool="prop-chest" data-tooltip="Chest (4)">📦</button>
-        <button class="tool-btn" data-tool="prop-barrel" data-tooltip="Barrel (5)">🛢</button>
-        <button class="tool-btn" data-tool="prop-bookshelf" data-tooltip="Bookshelf (6)">📚</button>
-        <button class="tool-btn" data-tool="prop-altar" data-tooltip="Altar (7)">⛩</button>
-        <button class="tool-btn" data-tool="prop-stairs" data-tooltip="Stairs (8)">🪜</button>
+        <button class="tool-btn" data-tool="prop-table" data-tooltip="Table (1)"><span class="material-symbols-outlined">table_restaurant</span></button>
+        <button class="tool-btn" data-tool="prop-chair" data-tooltip="Chair (2)"><span class="material-symbols-outlined">chair</span></button>
+        <button class="tool-btn" data-tool="prop-bed" data-tooltip="Bed (3)"><span class="material-symbols-outlined">bed</span></button>
+        <button class="tool-btn" data-tool="prop-chest" data-tooltip="Chest (4)"><span class="material-symbols-outlined">inventory_2</span></button>
+        <button class="tool-btn" data-tool="prop-barrel" data-tooltip="Barrel (5)"><span class="material-symbols-outlined">propane_tank</span></button>
+        <button class="tool-btn" data-tool="prop-bookshelf" data-tooltip="Bookshelf (6)"><span class="material-symbols-outlined">auto_stories</span></button>
+        <button class="tool-btn" data-tool="prop-altar" data-tooltip="Altar (7)"><span class="material-symbols-outlined">church</span></button>
+        <button class="tool-btn" data-tool="prop-stairs" data-tooltip="Stairs (8)"><span class="material-symbols-outlined">stairs</span></button>
       </div>
 
       <!-- ── Style Panel (left floating) ── -->
@@ -240,6 +242,7 @@
               <input type="checkbox" id="chk-merge" style="display:none">
               <input type="checkbox" id="chk-legend" checked style="display:none">
               <input type="checkbox" id="chk-graph-paper" checked style="display:none">
+              <input type="checkbox" id="chk-web-glyphs" style="display:none">
             </div>
           </div>
 

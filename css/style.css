@@ -294,6 +294,10 @@ html, body {
   position: relative;
 }
 
+#tool-rail .tool-btn .material-symbols-outlined {
+  font-size: 20px;
+}
+
 #tool-rail .tool-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
