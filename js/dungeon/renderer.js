@@ -125,8 +125,15 @@ export class Renderer {
     // 7. Shadows — drawn before doors so doors always appear on top
     if (this.showShadows) this._drawShadows(ctx, dungeon, cs);
 
-    // 8. Doors
+    // 7b. Door shadows (stair openings)
+    if (this.showShadows) this._drawDoorShadows(ctx, dungeon, cs);
+
+    // 8. Doors (includes seam lines)
+    this._drawDoorSeams(ctx, dungeon, cs);
     this._drawDoors(ctx, dungeon, cs);
+
+    // 8a. Colonnades
+    this._drawColonnades(ctx, dungeon, cs);
 
     // 8b. Polygon preview
     if (this.ghostPolygon && this.ghostPolygon.length >= 2) {
@@ -164,17 +171,6 @@ export class Renderer {
   // ── Water ──────────────────────────────────────────────────────────────────
 
   _drawWater(ctx, dungeon, cs) {
-<<<<<<< HEAD
-    ctx.fillStyle = Style.water;
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    for (const room of dungeon.rooms) {
-      if (!room.water || room.hidden) continue;
-      this._roomPath(ctx, room, cs);
-    }
-    ctx.fill('nonzero');
-    ctx.globalAlpha = 1;
-=======
     for (const room of dungeon.rooms) {
       if (!room.water || room.hidden) continue;
 
@@ -307,7 +303,6 @@ export class Renderer {
     if (Math.abs(d) < 1e-10) return null;
     const t = ((a1x - b1x) * (b1y - b2y) - (a1y - b1y) * (b1x - b2x)) / d;
     return { x: a1x + t * (a2x - a1x), y: a1y + t * (a2y - a1y) };
->>>>>>> 84f7cb8 (feat: enhance water rendering with ripple effects and inset room paths)
   }
 
   // ── Walls ──────────────────────────────────────────────────────────────────
@@ -850,6 +845,39 @@ export class Renderer {
         }
         break;
       }
+      case DOOR_TYPE.STAIRS_UP:
+      case DOOR_TYPE.STAIRS_DOWN: {
+        const goingDown = door.type === DOOR_TYPE.STAIRS_DOWN;
+        ctx.lineWidth = Style.normal;
+        ctx.strokeStyle = Style.ink;
+        // Draw 5 parallel lines perpendicular to the door direction
+        // "broadwise" = perpendicular to dir, "lengthwise" = along dir
+        const bx = -dir.y, by = dir.x;  // broad axis (perpendicular)
+        const steps = 5;
+        for (let i = goingDown ? 0 : 1; i < steps; i++) {
+          const halfW = cs * 0.5 * (steps - i) / steps * (goingDown ? 0.8 : 1);
+          const along = cs * 0.5 * (i / steps - 0.5);
+          const cx = px + dir.x * along;
+          const cy = py + dir.y * along;
+          ctx.beginPath();
+          ctx.moveTo(cx - bx * halfW, cy - by * halfW);
+          ctx.lineTo(cx + bx * halfW, cy + by * halfW);
+          ctx.stroke();
+        }
+        // Arrow indicator: small triangle pointing up or down
+        const arrowDir = goingDown ? 1 : -1;
+        const ax = px + dir.x * cs * 0.35 * arrowDir;
+        const ay = py + dir.y * cs * 0.35 * arrowDir;
+        const as = cs * 0.12;
+        ctx.fillStyle = Style.ink;
+        ctx.beginPath();
+        ctx.moveTo(ax + dir.x * as, ay + dir.y * as);
+        ctx.lineTo(ax - dir.x * as * 0.5 + bx * as, ay - dir.y * as * 0.5 + by * as);
+        ctx.lineTo(ax - dir.x * as * 0.5 - bx * as, ay - dir.y * as * 0.5 - by * as);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
     }
 
     // Selection highlight
@@ -903,6 +931,128 @@ export class Renderer {
     ctx.fill('nonzero');
     ctx.restore();
     ctx.globalAlpha = 1;
+  }
+
+  // ── Door shadows (stair openings) ──────────────────────────────────────────
+
+  _drawDoorShadows(ctx, dungeon, cs) {
+    const sd = Style.shadowDist * cs * 0.06;
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#000000';
+    ctx.translate(sd, sd);
+    for (const door of dungeon.doors) {
+      if (door.type !== DOOR_TYPE.STAIRS_UP && door.type !== DOOR_TYPE.STAIRS_DOWN) continue;
+      const px = door.x * cs, py = door.y * cs;
+      const isH = door.dir.y !== 0;
+      const sw = isH ? cs : cs * 0.5;
+      const sh = isH ? cs * 0.5 : cs;
+      ctx.fillRect(px - sw / 2, py - sh / 2, sw, sh);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Door seam lines ────────────────────────────────────────────────────────
+
+  _drawDoorSeams(ctx, dungeon, cs) {
+    ctx.strokeStyle = Style.ink;
+    ctx.lineWidth = Style.thin;
+    ctx.globalAlpha = 0.6;
+    for (const door of dungeon.doors) {
+      const px = door.x * cs, py = door.y * cs;
+      const dir = door.dir;
+      // Broad axis = perpendicular to door direction
+      const bx = -dir.y, by = dir.x;
+      const halfCell = cs * 0.5;
+      // Seam at each side of the door opening (where wall meets gap)
+      for (const side of [-1, 1]) {
+        const sx = px + bx * halfCell * side;
+        const sy = py + by * halfCell * side;
+        const seamLen = cs * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(sx - dir.x * seamLen, sy - dir.y * seamLen);
+        ctx.lineTo(sx + dir.x * seamLen, sy + dir.y * seamLen);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Colonnades ─────────────────────────────────────────────────────────────
+
+  _drawColonnades(ctx, dungeon, cs) {
+    for (const room of dungeon.rooms) {
+      if (!room.columns || room.hidden) continue;
+      if (room.points) continue; // skip polygon rooms — no clear edge to follow
+
+      const rng = new RNG(room.id * 3571);
+      const colR = cs * 0.15;  // column radius in pixels
+
+      if (room.round) {
+        // Circular room: columns around the inner perimeter
+        const ringR = (room.w / 2 - 1) * cs;
+        if (ringR <= colR * 2) continue;
+        const circumference = 2 * Math.PI * ringR;
+        const count = Math.max(4, Math.floor(circumference / cs));
+        const cxPx = room.cx * cs, cyPx = room.cy * cs;
+        for (let i = 0; i < count; i++) {
+          const angle = (i + 0.5) / count * 2 * Math.PI;
+          const x = cxPx + Math.cos(angle) * ringR;
+          const y = cyPx + Math.sin(angle) * ringR;
+          this._drawColumn(ctx, x, y, colR, rng);
+        }
+      } else {
+        // Rectangular room: columns 1 cell inset from each edge
+        const inset = 1;
+        if (room.w < inset * 2 + 1 || room.h < inset * 2 + 1) continue;
+        const x0 = (room.x + inset) * cs, y0 = (room.y + inset) * cs;
+        const x1 = (room.x + room.w - inset) * cs, y1 = (room.y + room.h - inset) * cs;
+        // Top and bottom rows
+        for (let gx = room.x + inset; gx <= room.x + room.w - inset; gx++) {
+          this._drawColumn(ctx, gx * cs, y0, colR, rng);
+          this._drawColumn(ctx, gx * cs, y1, colR, rng);
+        }
+        // Left and right columns (skip corners — already drawn)
+        for (let gy = room.y + inset + 1; gy < room.y + room.h - inset; gy++) {
+          this._drawColumn(ctx, x0, gy * cs, colR, rng);
+          this._drawColumn(ctx, x1, gy * cs, colR, rng);
+        }
+      }
+    }
+  }
+
+  _drawColumn(ctx, x, y, r, rng) {
+    const shattered = rng.next() < 0.15;  // 15% chance of damaged column
+
+    if (shattered) {
+      // Damaged column: just an outline with floor fill
+      ctx.fillStyle = Style.floor;
+      ctx.strokeStyle = Style.ink;
+      ctx.lineWidth = Style.thin;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // Intact column: shadow + shaded fill + outline
+      // Shadow
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.arc(x + 1.5, y + 1.5, r + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      // Column body
+      ctx.fillStyle = Style.shading;
+      ctx.strokeStyle = Style.ink;
+      ctx.lineWidth = Style.normal;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   // ── Labels ─────────────────────────────────────────────────────────────────

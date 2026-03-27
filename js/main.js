@@ -702,8 +702,9 @@ function showPropsRoom(room) {
   document.getElementById('prop-room-type').value     = room.type  ?? 'normal';
   document.getElementById('prop-room-icon').value     = room.icon  ?? 'none';
   document.getElementById('prop-room-story-role').value = room.story?.role ?? 'none';
-  document.getElementById('prop-room-water').checked  = room.water ?? false;
-  document.getElementById('prop-room-notes').value    = room.notes ?? '';
+  document.getElementById('prop-room-water').checked   = room.water ?? false;
+  document.getElementById('prop-room-columns').checked = room.columns ?? false;
+  document.getElementById('prop-room-notes').value     = room.notes ?? '';
 }
 
 function setRoomStoryRole(room, role) {
@@ -772,6 +773,9 @@ document.getElementById('prop-room-story-role').addEventListener('change', e => 
 });
 document.getElementById('prop-room-water').addEventListener('change', e => {
   if (renderer.selectedRoom) { renderer.selectedRoom.water = e.target.checked; render(); }
+});
+document.getElementById('prop-room-columns').addEventListener('change', e => {
+  if (renderer.selectedRoom) { renderer.selectedRoom.columns = e.target.checked; render(); }
 });
 document.getElementById('prop-room-notes').addEventListener('input', e => {
   if (renderer.selectedRoom) renderer.selectedRoom.notes = e.target.value;

@@ -10,6 +10,8 @@ export const DOOR_TYPE = {
   LOCKED:     'locked',
   SECRET:     'secret',
   PORTCULLIS: 'portcullis',
+  STAIRS_UP:  'stairs_up',
+  STAIRS_DOWN:'stairs_down',
 };
 
 // ── Room types ───────────────────────────────────────────────────────────────
@@ -69,6 +71,7 @@ export class Room {
     this.label   = '';
     this.notes   = '';
     this.water   = false;
+    this.columns = false;
     this.hidden  = false;
     this.icon    = 'none';   // key into ROOM_ICONS; 'none' = use type default
     this.order   = '';       // narrative order label: 'Entry', '1', '2', 'Boss', 'End', etc.
@@ -160,7 +163,8 @@ export class Room {
   toJSON() {
     return { id: this.id, x: this.x, y: this.y, w: this.w, h: this.h,
              round: this.round, type: this.type, label: this.label,
-             notes: this.notes, water: this.water, icon: this.icon, order: this.order,
+             notes: this.notes, water: this.water, columns: this.columns,
+             icon: this.icon, order: this.order,
              points: this.points, mergeGroup: this.mergeGroup, story: this.story };
   }
 
@@ -168,7 +172,8 @@ export class Room {
     const r = new Room(d);
     r.id    = d.id;
     r.type  = d.type;  r.label = d.label; r.notes = d.notes;
-    r.water = d.water; r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
+    r.water = d.water; r.columns = d.columns ?? false;
+    r.icon  = d.icon ?? 'none'; r.order = d.order ?? '';
     r.points = d.points ?? null;
     r.mergeGroup = d.mergeGroup ?? null;
     r.story = d.story ?? null;
