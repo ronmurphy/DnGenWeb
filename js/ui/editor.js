@@ -2,7 +2,7 @@
  * Editor — handles all canvas mouse/touch interaction.
  * Tools: select, room, round-room, door, erase
  */
-import { Room, Door, DOOR_TYPE } from '../dungeon/model.js';
+import { Room, Door, DOOR_TYPE, Prop } from '../dungeon/model.js';
 
 export class Editor {
   /**
@@ -42,6 +42,11 @@ export class Editor {
     // Polygon tool state
     this._polygonPoints = [];
 
+    // Prop tool state
+    this._movingProp     = false;
+    this._movePropStart  = null;   // { x, y } original prop position
+    this._movePropDrag   = null;   // { x, y } grid at drag start
+
     // Modifier keys state
     this._shiftKey = false;
     this._bindEvents();
@@ -51,7 +56,9 @@ export class Editor {
     this.dungeon = dungeon;
     this.renderer.selectedRoom = null;
     this.renderer.selectedDoor = null;
+    this.renderer.selectedProp = null;
     this.renderer.ghostRoom    = null;
+    this.renderer.ghostProp    = null;
   }
 
   setTool(tool) {
@@ -59,8 +66,19 @@ export class Editor {
     this.renderer.ghostRoom = null;
     this.renderer.ghostDoor = null;
     this.renderer.ghostPolygon = null;
+    this.renderer.ghostProp = null;
     this._polygonPoints = [];
     this.canvas.parentElement.className = `tool-${tool}`;
+  }
+
+  /** Check if current tool is a prop placement tool. */
+  _isPropTool() {
+    return this.tool.startsWith('prop-');
+  }
+
+  /** Get PROP_TYPE from current tool name. */
+  _propTypeFromTool() {
+    return this.tool.replace('prop-', '');
   }
 
   // ── Event binding ───────────────────────────────────────────────────────────
@@ -136,6 +154,24 @@ export class Editor {
       return;
     }
 
+    // Prop placement tools — click to place
+    if (this._isPropTool()) {
+      const g = this._toGrid(mx, my);
+      const room = this.dungeon.roomAt(g.x, g.y);
+      if (room) {
+        const prop = new Prop({ type: this._propTypeFromTool(), x: g.x, y: g.y });
+        this.dungeon.addProp(prop);
+        this.renderer.selectedProp = prop;
+        this.renderer.selectedRoom = null;
+        this.renderer.selectedDoor = null;
+        this.renderer.ghostProp = null;
+        this.onUpdate();
+        this._emitSelection(null, null, prop);
+        this.onChanged?.();
+      }
+      return;
+    }
+
     const snap = this._snapToGrid(mx, my);
     this._dragging  = true;
     this._dragStart = snap;
@@ -176,20 +212,36 @@ export class Editor {
         break;
       }
       case 'select': {
-        // If clicking on the already-selected room, start a move drag
         const g = this._toGrid(mx, my);
-        const clicked = this.dungeon.roomAt(g.x, g.y);
-        if (clicked && clicked === this.renderer.selectedRoom) {
-          this._movingRoom    = true;
-          this._moveRoomStart = { x: clicked.x, y: clicked.y };
-          this._moveDragStart = snap;
-          if (clicked.points && clicked.points.length > 0) {
-            this._moveRoomPoints = clicked.points.map(p => ({ x: p.x, y: p.y }));
-          } else {
-            this._moveRoomPoints = null;
-          }
+        // Check if clicking on a prop first (small hit target, higher priority)
+        const clickedProp = this.dungeon.propAt(g.x, g.y);
+        if (clickedProp && clickedProp === this.renderer.selectedProp) {
+          // Start moving the selected prop
+          this._movingProp    = true;
+          this._movePropStart = { x: clickedProp.x, y: clickedProp.y };
+          this._movePropDrag  = g;
+        } else if (clickedProp) {
+          this.renderer.selectedProp = clickedProp;
+          this.renderer.selectedRoom = null;
+          this.renderer.selectedDoor = null;
+          this.onUpdate();
+          this._emitSelection(null, null, clickedProp);
         } else {
-          this._selectAt(mx, my);
+          // If clicking on the already-selected room, start a move drag
+          this.renderer.selectedProp = null;
+          const clicked = this.dungeon.roomAt(g.x, g.y);
+          if (clicked && clicked === this.renderer.selectedRoom) {
+            this._movingRoom    = true;
+            this._moveRoomStart = { x: clicked.x, y: clicked.y };
+            this._moveDragStart = snap;
+            if (clicked.points && clicked.points.length > 0) {
+              this._moveRoomPoints = clicked.points.map(p => ({ x: p.x, y: p.y }));
+            } else {
+              this._moveRoomPoints = null;
+            }
+          } else {
+            this._selectAt(mx, my);
+          }
         }
         break;
       }
@@ -206,6 +258,27 @@ export class Editor {
       const dy = (my - this._panStart.my) / this.renderer.zoom;
       this.renderer.panX = panX + dx;
       this.renderer.panY = panY + dy;
+      this.onUpdate();
+      return;
+    }
+
+    // Move selected prop
+    if (this._movingProp && this.renderer.selectedProp) {
+      const g = this._toGrid(mx, my);
+      const dx = g.x - this._movePropDrag.x;
+      const dy = g.y - this._movePropDrag.y;
+      this.renderer.selectedProp.x = this._movePropStart.x + dx;
+      this.renderer.selectedProp.y = this._movePropStart.y + dy;
+      this.onUpdate();
+      return;
+    }
+
+    // Prop tool ghost preview
+    if (this._isPropTool()) {
+      const g = this._toGrid(mx, my);
+      this.renderer.ghostProp = { type: this._propTypeFromTool(), x: g.x, y: g.y, rotation: 0 };
+      this.renderer.ghostRoom = null;
+      this.renderer.ghostDoor = null;
       this.onUpdate();
       return;
     }
@@ -307,6 +380,16 @@ export class Editor {
   _onMouseUp(e) {
     if (this._isPanning) { this._isPanning = false; return; }
 
+    // Finalize prop move
+    if (this._movingProp) {
+      this._movingProp = false;
+      this._movePropStart = null;
+      this._movePropDrag = null;
+      this._dragging = false;
+      this.onChanged?.();
+      return;
+    }
+
     // Finalize room resize
     if (this._resizingRoom) {
       this._resizingRoom = false;
@@ -391,10 +474,12 @@ export class Editor {
 
   _onMouseLeave() {
     this._movingRoom = false;
+    this._movingProp = false;
     this._resizingRoom = false;
     this._resizeHandle = null;
     this.renderer.ghostRoom = null;
     this.renderer.ghostPolygon = null;
+    this.renderer.ghostProp = null;
     this.onUpdate();
   }
 
@@ -471,7 +556,18 @@ export class Editor {
   _selectAt(mx, my) {
     const g = this._toGrid(mx, my);
 
-    // Check doors first (small hit area)
+    // Check props first (smallest hit area)
+    const prop = this.dungeon.propAt(g.x, g.y);
+    if (prop) {
+      this.renderer.selectedProp = prop;
+      this.renderer.selectedDoor = null;
+      this.renderer.selectedRoom = null;
+      this.onUpdate();
+      this._emitSelection(null, null, prop);
+      return;
+    }
+
+    // Check doors (small hit area)
     for (const door of this.dungeon.doors) {
       const dpx = this.renderer.gx(door.x);
       const dpy = this.renderer.gy(door.y);
@@ -479,6 +575,7 @@ export class Editor {
       if (dist < 12) {
         this.renderer.selectedDoor = door;
         this.renderer.selectedRoom = null;
+        this.renderer.selectedProp = null;
         this.onUpdate();
         this._emitSelection(null, door);
         return;
@@ -489,6 +586,7 @@ export class Editor {
     const room = this.dungeon.roomAt(g.x, g.y);
     this.renderer.selectedRoom = room;
     this.renderer.selectedDoor = null;
+    this.renderer.selectedProp = null;
     this.onUpdate();
     this._emitSelection(room, null);
   }
@@ -496,7 +594,17 @@ export class Editor {
   _eraseAt(mx, my) {
     const g = this._toGrid(mx, my);
 
-    // Check doors first
+    // Check props first
+    const prop = this.dungeon.propAt(g.x, g.y);
+    if (prop) {
+      if (this.renderer.selectedProp === prop) this.renderer.selectedProp = null;
+      this.dungeon.removeProp(prop);
+      this.onUpdate();
+      this.onChanged?.();
+      return;
+    }
+
+    // Check doors
     for (const door of this.dungeon.doors) {
       const dpx = door.x * this.renderer.cellSize;
       const dpy = door.y * this.renderer.cellSize;
@@ -799,8 +907,8 @@ export class Editor {
 
   // ── Selection event ────────────────────────────────────────────────────────
 
-  _emitSelection(room, door) {
-    window.dispatchEvent(new CustomEvent('dungeon:select', { detail: { room, door } }));
+  _emitSelection(room, door, prop = null) {
+    window.dispatchEvent(new CustomEvent('dungeon:select', { detail: { room, door, prop } }));
   }
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
@@ -822,7 +930,13 @@ export class Editor {
       case 'e': this.setTool('erase');      break;
       case 'delete':
       case 'backspace':
-        if (this.renderer.selectedRoom) {
+        if (this.renderer.selectedProp) {
+          this.dungeon.removeProp(this.renderer.selectedProp);
+          this.renderer.selectedProp = null;
+          this.onUpdate();
+          this._emitSelection(null, null);
+          this.onChanged?.();
+        } else if (this.renderer.selectedRoom) {
           this.dungeon.removeRoom(this.renderer.selectedRoom);
           this.renderer.selectedRoom = null;
           this.onUpdate();
@@ -836,11 +950,29 @@ export class Editor {
           this.onChanged?.();
         }
         break;
+      case 'q':
+        // Rotate selected prop 90° counter-clockwise
+        if (this.renderer.selectedProp) {
+          this.renderer.selectedProp.rotation -= Math.PI / 2;
+          this.onUpdate();
+          this.onChanged?.();
+        }
+        break;
+      case 'w':
+        // Rotate selected prop 90° clockwise
+        if (this.renderer.selectedProp) {
+          this.renderer.selectedProp.rotation += Math.PI / 2;
+          this.onUpdate();
+          this.onChanged?.();
+        }
+        break;
       case 'escape':
         this.renderer.selectedRoom = null;
         this.renderer.selectedDoor = null;
+        this.renderer.selectedProp = null;
         this.renderer.ghostRoom    = null;
         this.renderer.ghostPolygon = null;
+        this.renderer.ghostProp    = null;
         this._polygonPoints = [];
         this.onUpdate();
         this._emitSelection(null, null);

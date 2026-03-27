@@ -185,7 +185,11 @@ setStatus('select');
 // Keyboard shortcuts for tools
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const keyMap = { v: 'select', r: 'room', c: 'round-room', p: 'polygon', d: 'door', e: 'erase', x: 'resize' };
+  const keyMap = {
+    v: 'select', r: 'room', c: 'round-room', p: 'polygon', d: 'door', e: 'erase', x: 'resize',
+    '1': 'prop-table', '2': 'prop-chair', '3': 'prop-bed', '4': 'prop-chest',
+    '5': 'prop-barrel', '6': 'prop-bookshelf', '7': 'prop-altar', '8': 'prop-stairs',
+  };
   const tool = keyMap[e.key.toLowerCase()];
   if (tool) {
     document.querySelectorAll('#tool-rail .tool-btn').forEach(b => b.classList.remove('active'));
@@ -686,17 +690,20 @@ document.getElementById('btn-regenerate-story').addEventListener('click', () => 
 const propsEmpty = document.getElementById('props-empty');
 const propsRoom  = document.getElementById('props-room');
 const propsDoor  = document.getElementById('props-door');
+const propsProp  = document.getElementById('props-prop');
 
 function showPropsEmpty() {
   propsEmpty.style.display = '';
   propsRoom.style.display  = 'none';
   propsDoor.style.display  = 'none';
+  propsProp.style.display  = 'none';
 }
 
 function showPropsRoom(room) {
   propsEmpty.style.display = 'none';
   propsRoom.style.display  = '';
   propsDoor.style.display  = 'none';
+  propsProp.style.display  = 'none';
   document.getElementById('prop-room-label').value    = room.label ?? '';
   document.getElementById('prop-room-order').value    = room.order ?? '';
   document.getElementById('prop-room-type').value     = room.type  ?? 'normal';
@@ -745,12 +752,22 @@ function showPropsDoor(door) {
   propsEmpty.style.display = 'none';
   propsRoom.style.display  = 'none';
   propsDoor.style.display  = '';
+  propsProp.style.display  = 'none';
   document.getElementById('prop-door-type').value = door.type ?? 'door';
 }
 
+function showPropsProp(prop) {
+  propsEmpty.style.display = 'none';
+  propsRoom.style.display  = 'none';
+  propsDoor.style.display  = 'none';
+  propsProp.style.display  = '';
+  document.getElementById('prop-prop-type').value = prop.type ?? 'table';
+}
+
 window.addEventListener('dungeon:select', e => {
-  const { room, door } = e.detail;
-  if (room) showPropsRoom(room);
+  const { room, door, prop } = e.detail;
+  if (prop) showPropsProp(prop);
+  else if (room) showPropsRoom(room);
   else if (door) showPropsDoor(door);
   else showPropsEmpty();
 });
@@ -797,6 +814,25 @@ document.getElementById('btn-delete-door').addEventListener('click', () => {
   if (renderer.selectedDoor) {
     dungeon.removeDoor(renderer.selectedDoor);
     renderer.selectedDoor = null;
+    showPropsEmpty();
+    render();
+  }
+});
+
+// Prop property changes
+document.getElementById('prop-prop-type').addEventListener('change', e => {
+  if (renderer.selectedProp) { renderer.selectedProp.type = e.target.value; render(); }
+});
+document.getElementById('btn-prop-rot-ccw').addEventListener('click', () => {
+  if (renderer.selectedProp) { renderer.selectedProp.rotation -= Math.PI / 2; render(); }
+});
+document.getElementById('btn-prop-rot-cw').addEventListener('click', () => {
+  if (renderer.selectedProp) { renderer.selectedProp.rotation += Math.PI / 2; render(); }
+});
+document.getElementById('btn-delete-prop').addEventListener('click', () => {
+  if (renderer.selectedProp) {
+    dungeon.removeProp(renderer.selectedProp);
+    renderer.selectedProp = null;
     showPropsEmpty();
     render();
   }

@@ -4,11 +4,13 @@
 import { ROOM_ICONS, DOOR_TYPE } from './model.js';
 
 const DOOR_LABELS = {
-  [DOOR_TYPE.OPEN]:       'Open Archway',
-  [DOOR_TYPE.DOOR]:       'Door',
-  [DOOR_TYPE.LOCKED]:     'Locked Door',
-  [DOOR_TYPE.SECRET]:     'Secret Door',
-  [DOOR_TYPE.PORTCULLIS]: 'Portcullis',
+  [DOOR_TYPE.OPEN]:        'Open Archway',
+  [DOOR_TYPE.DOOR]:        'Door',
+  [DOOR_TYPE.LOCKED]:      'Locked Door',
+  [DOOR_TYPE.SECRET]:      'Secret Door',
+  [DOOR_TYPE.PORTCULLIS]:  'Portcullis',
+  [DOOR_TYPE.STAIRS_UP]:   'Stairs Up',
+  [DOOR_TYPE.STAIRS_DOWN]: 'Stairs Down',
 };
 
 /** Sort rooms by narrative order field. */

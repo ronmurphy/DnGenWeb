@@ -214,6 +214,39 @@ export class Door {
   }
 }
 
+// ── Prop types ──────────────────────────────────────────────────────────────
+export const PROP_TYPE = {
+  TABLE:     'table',
+  CHAIR:     'chair',
+  BED:       'bed',
+  CHEST:     'chest',
+  BARREL:    'barrel',
+  BOOKSHELF: 'bookshelf',
+  ALTAR:     'altar',
+  STAIRS:    'stairs',
+};
+
+// ── Prop ────────────────────────────────────────────────────────────────────
+export class Prop {
+  constructor({ type = PROP_TYPE.TABLE, x = 0, y = 0, rotation = 0 } = {}) {
+    this.id       = uid();
+    this.type     = type;
+    this.x        = x;       // grid coords
+    this.y        = y;
+    this.rotation = rotation; // radians
+  }
+
+  toJSON() {
+    return { id: this.id, type: this.type, x: this.x, y: this.y, rotation: this.rotation };
+  }
+
+  static fromJSON(d) {
+    const p = new Prop(d);
+    p.id = d.id;
+    return p;
+  }
+}
+
 // ── Dungeon ───────────────────────────────────────────────────────────────────
 export class Dungeon {
   constructor(seed = 12345) {
@@ -222,6 +255,7 @@ export class Dungeon {
     this.hook  = '';
     this.rooms = [];
     this.doors = [];
+    this.props = [];
     this.story = { slots: [], locked: [] };
   }
 
@@ -248,6 +282,25 @@ export class Dungeon {
     if (door.to)   door.to.doors   = door.to.doors.filter(d => d !== door);
   }
 
+  addProp(prop) {
+    this.props.push(prop);
+    return prop;
+  }
+
+  removeProp(prop) {
+    this.props = this.props.filter(p => p !== prop);
+  }
+
+  /** Find prop nearest to grid position within radius. */
+  propAt(gx, gy, radius = 0.6) {
+    let best = null, bestDist = radius;
+    for (const p of this.props) {
+      const d = Math.hypot(p.x - gx, p.y - gy);
+      if (d < bestDist) { bestDist = d; best = p; }
+    }
+    return best;
+  }
+
   /** Find room at grid position (gx, gy). */
   roomAt(gx, gy) {
     return this.rooms.find(r => r.contains(gx, gy)) ?? null;
@@ -271,6 +324,7 @@ export class Dungeon {
       seed: this.seed, name: this.name, hook: this.hook,
       rooms: this.rooms.map(r => r.toJSON()),
       doors: this.doors.map(d => d.toJSON()),
+      props: this.props.map(p => p.toJSON()),
       story: this.story,
     };
   }
@@ -290,6 +344,9 @@ export class Dungeon {
       door.id   = dd.id;
       door.type = dd.type;
       d.doors.push(door);
+    }
+    for (const pd of (data.props ?? [])) {
+      d.props.push(Prop.fromJSON(pd));
     }
     d.story = data.story ?? { slots: [], locked: [] };
     return d;

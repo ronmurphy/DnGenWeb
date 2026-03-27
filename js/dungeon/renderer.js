@@ -34,9 +34,11 @@ export class Renderer {
     // UI state
     this.selectedRoom = null;
     this.selectedDoor = null;
+    this.selectedProp = null;
     this.ghostRoom    = null;  // preview while drawing a room
     this.ghostDoor    = null;  // preview while hovering in door mode
     this.ghostPolygon = null;  // preview while drawing a polygon room
+    this.ghostProp    = null;  // preview while hovering in prop mode
     this.gridMode     = 'dotted';
     this.showShadows  = true;
     this.showProps    = true;
@@ -135,7 +137,10 @@ export class Renderer {
     // 8a. Colonnades
     this._drawColonnades(ctx, dungeon, cs);
 
-    // 8b. Polygon preview
+    // 8b. Placed props (user-placed decor)
+    this._drawPlacedProps(ctx, dungeon, cs);
+
+    // 8c. Polygon preview
     if (this.ghostPolygon && this.ghostPolygon.length >= 2) {
       this._drawGhostPolygon(ctx, cs);
     }
@@ -506,89 +511,287 @@ export class Renderer {
     };
   }
 
-  // ── Floor details (cracks) ──────────────────────────────────────────────────
+  // ── Floor details (random auto-props for rooms without placed decor) ────────
 
   _drawDetails(ctx, dungeon, cs, rng) {
+    // Only auto-generate props for rooms that have no placed decor
+    const roomsWithProps = new Set();
+    for (const p of dungeon.props) {
+      const room = dungeon.roomAt(p.x, p.y);
+      if (room) roomsWithProps.add(room);
+    }
+
     ctx.strokeStyle = Style.ink;
     ctx.lineWidth   = Style.thin;
-    ctx.globalAlpha = 0.65;
+    ctx.globalAlpha = 0.5;
 
     const propTypes = ['bed', 'chair', 'table', 'chest'];
 
     for (const room of dungeon.rooms) {
       if (room.hidden || room.w < 4 || room.h < 4) continue;
+      if (roomsWithProps.has(room)) continue; // skip — user placed decor here
       const area = room.w * room.h;
       const count = Math.max(1, Math.min(5, Math.floor(area * 0.05 + rng.next() * 1.5)));
 
       for (let i = 0; i < count; i++) {
         const px = (room.x + rng.float(0.7, room.w - 0.7)) * cs;
         const py = (room.y + rng.float(0.7, room.h - 0.7)) * cs;
-        const psize = cs * rng.float(0.6, 1.2);
         const type = propTypes[Math.floor(rng.next() * propTypes.length)];
+        const rot = rng.next() < 0.5 ? 0 : Math.PI / 2;
 
         ctx.save();
-        this._drawProp(ctx, type, px, py, psize, rng);
+        ctx.translate(px, py);
+        ctx.rotate(rot);
+        this._drawPropShape(ctx, type, cs * 0.8);
         ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
   }
 
-  _drawProp(ctx, type, x, y, size, rng) {
-    const half = size / 2;
-    const direction = rng.next() < 0.5 ? 0 : Math.PI / 2;
-    ctx.translate(x, y);
-    ctx.rotate(direction);
+  // ── Placed props ──────────────────────────────────────────────────────────
+
+  _drawPlacedProps(ctx, dungeon, cs) {
+    ctx.globalAlpha = 0.85;
+    for (const prop of dungeon.props) {
+      ctx.save();
+      ctx.translate(prop.x * cs, prop.y * cs);
+      ctx.rotate(prop.rotation);
+      ctx.strokeStyle = Style.ink;
+      ctx.lineWidth   = Style.normal;
+      this._drawPropShape(ctx, prop.type, cs);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    // Ghost prop preview
+    if (this.ghostProp) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.translate(this.ghostProp.x * cs, this.ghostProp.y * cs);
+      ctx.rotate(this.ghostProp.rotation);
+      ctx.strokeStyle = Style.ink;
+      ctx.lineWidth = Style.normal;
+      this._drawPropShape(ctx, this.ghostProp.type, cs);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    // Selection highlight on prop
+    if (this.selectedProp) {
+      const p = this.selectedProp;
+      ctx.save();
+      ctx.strokeStyle = '#89b4fa';
+      ctx.lineWidth = 2 / this.zoom;
+      ctx.setLineDash([4 / this.zoom, 4 / this.zoom]);
+      ctx.beginPath();
+      ctx.arc(p.x * cs, p.y * cs, cs * 0.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  // ── Prop shape drawing ────────────────────────────────────────────────────
+
+  _drawPropShape(ctx, type, size) {
+    const s = size * 0.4;  // half-size unit
 
     switch (type) {
-      case 'bed':
-        ctx.fillStyle = 'rgba(200, 200, 230, 0.7)';
-        ctx.fillRect(-half, -half * 0.6, size, half * 1.2);
-        ctx.strokeRect(-half, -half * 0.6, size, half * 1.2);
+      case 'table': {
+        // Rectangular table with rounded corners + wood grain line
+        ctx.fillStyle = Style.shading;
+        const tw = s * 1.6, th = s * 0.9;
         ctx.beginPath();
-        ctx.moveTo(-half, -half * 0.2);
-        ctx.lineTo(half, -half * 0.2);
+        ctx.roundRect(-tw / 2, -th / 2, tw, th, s * 0.1);
+        ctx.fill();
+        ctx.stroke();
+        // Wood grain center line
+        ctx.beginPath();
+        ctx.moveTo(-tw * 0.35, 0);
+        ctx.lineTo(tw * 0.35, 0);
+        ctx.stroke();
+        // Legs (small circles at corners)
+        ctx.fillStyle = Style.ink;
+        const legR = s * 0.08;
+        for (const [lx, ly] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          ctx.beginPath();
+          ctx.arc(lx * tw * 0.38, ly * th * 0.38, legR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+
+      case 'chair': {
+        // Small seat with back
+        ctx.fillStyle = Style.floor;
+        const cw = s * 0.7;
+        ctx.beginPath();
+        ctx.roundRect(-cw / 2, -cw / 2, cw, cw, s * 0.08);
+        ctx.fill();
+        ctx.stroke();
+        // Back rest (thick line across top)
+        ctx.lineWidth *= 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-cw / 2, -cw / 2 - s * 0.12);
+        ctx.lineTo(cw / 2, -cw / 2 - s * 0.12);
+        ctx.stroke();
+        ctx.lineWidth /= 1.5;
+        break;
+      }
+
+      case 'bed': {
+        // Bed frame with pillow and blanket
+        ctx.fillStyle = Style.floor;
+        const bw = s * 1.0, bh = s * 1.8;
+        ctx.beginPath();
+        ctx.roundRect(-bw / 2, -bh / 2, bw, bh, s * 0.1);
+        ctx.fill();
+        ctx.stroke();
+        // Pillow (smaller rect at top)
+        ctx.fillStyle = '#d8d0c4';
+        ctx.beginPath();
+        ctx.roundRect(-bw * 0.35, -bh * 0.4, bw * 0.7, bh * 0.18, s * 0.06);
+        ctx.fill();
+        ctx.stroke();
+        // Blanket fold line
+        ctx.beginPath();
+        ctx.moveTo(-bw * 0.4, -bh * 0.1);
+        ctx.lineTo(bw * 0.4, -bh * 0.1);
         ctx.stroke();
         break;
+      }
 
-      case 'chair':
-        ctx.fillStyle = 'rgba(220, 180, 140, 0.7)';
-        ctx.fillRect(-half * 0.7, -half * 0.7, half * 1.4, half * 1.4);
-        ctx.strokeRect(-half * 0.7, -half * 0.7, half * 1.4, half * 1.4);
+      case 'chest': {
+        // Chest with lid detail and clasp
+        ctx.fillStyle = '#b08860';
+        const chw = s * 1.0, chh = s * 0.6;
         ctx.beginPath();
-        ctx.moveTo(-half * 0.7, -half * 0.7);
-        ctx.lineTo(-half * 0.7, -half * 1.1);
-        ctx.moveTo(half * 0.7, -half * 0.7);
-        ctx.lineTo(half * 0.7, -half * 1.1);
+        ctx.rect(-chw / 2, -chh / 2, chw, chh);
+        ctx.fill();
+        ctx.stroke();
+        // Lid line
+        ctx.beginPath();
+        ctx.moveTo(-chw / 2, -chh * 0.15);
+        ctx.lineTo(chw / 2, -chh * 0.15);
+        ctx.stroke();
+        // Clasp (small circle)
+        ctx.fillStyle = Style.ink;
+        ctx.beginPath();
+        ctx.arc(0, chh * 0.1, s * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+        // Metal bands
+        ctx.lineWidth *= 0.6;
+        ctx.beginPath();
+        ctx.moveTo(-chw * 0.25, -chh / 2);
+        ctx.lineTo(-chw * 0.25, chh / 2);
+        ctx.moveTo(chw * 0.25, -chh / 2);
+        ctx.lineTo(chw * 0.25, chh / 2);
+        ctx.stroke();
+        ctx.lineWidth /= 0.6;
+        break;
+      }
+
+      case 'barrel': {
+        // Circle with three horizontal bands
+        ctx.fillStyle = '#c4a06a';
+        const br = s * 0.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, br, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Horizontal bands
+        ctx.beginPath();
+        ctx.moveTo(-br * 0.85, -br * 0.35);
+        ctx.lineTo(br * 0.85, -br * 0.35);
+        ctx.moveTo(-br * 0.95, 0);
+        ctx.lineTo(br * 0.95, 0);
+        ctx.moveTo(-br * 0.85, br * 0.35);
+        ctx.lineTo(br * 0.85, br * 0.35);
         ctx.stroke();
         break;
+      }
 
-      case 'table':
-        ctx.fillStyle = 'rgba(190, 160, 120, 0.7)';
-        ctx.fillRect(-half * 0.9, -half * 0.4, half * 1.8, half * 0.8);
-        ctx.strokeRect(-half * 0.9, -half * 0.4, half * 1.8, half * 0.8);
-        // legs
-        const leg = half * 0.15;
-        ctx.fillRect(-half * 0.8, half * 0.3, leg, leg);
-        ctx.fillRect(half * 0.65, half * 0.3, leg, leg);
-        ctx.fillRect(-half * 0.8, -half * 0.45, leg, leg);
-        ctx.fillRect(half * 0.65, -half * 0.45, leg, leg);
-        break;
-
-      case 'chest':
-        ctx.fillStyle = 'rgba(160, 110, 90, 0.7)';
-        ctx.fillRect(-half, -half * 0.5, size, half);
-        ctx.strokeRect(-half, -half * 0.5, size, half);
+      case 'bookshelf': {
+        // Tall rectangle with book spines (vertical lines)
+        ctx.fillStyle = '#a0825e';
+        const bsw = s * 1.4, bsh = s * 0.6;
         ctx.beginPath();
-        ctx.moveTo(-half, -half * 0.5);
-        ctx.lineTo(half, -half * 0.5);
+        ctx.rect(-bsw / 2, -bsh / 2, bsw, bsh);
+        ctx.fill();
+        ctx.stroke();
+        // Book spines (vertical lines)
+        const nBooks = 7;
+        ctx.lineWidth *= 0.5;
+        for (let i = 1; i < nBooks; i++) {
+          const bx = -bsw / 2 + (bsw / nBooks) * i;
+          ctx.beginPath();
+          ctx.moveTo(bx, -bsh / 2);
+          ctx.lineTo(bx, bsh / 2);
+          ctx.stroke();
+        }
+        ctx.lineWidth /= 0.5;
+        // Shelf divider
+        ctx.beginPath();
+        ctx.moveTo(-bsw / 2, 0);
+        ctx.lineTo(bsw / 2, 0);
         ctx.stroke();
         break;
+      }
 
-      default:
-        ctx.fillStyle = 'rgba(180, 180, 180, 0.7)';
-        ctx.fillRect(-half, -half, size, size);
-        ctx.strokeRect(-half, -half, size, size);
+      case 'altar': {
+        // Rectangular altar with two decorative circles
+        ctx.fillStyle = Style.shading;
+        const aw = s * 1.2, ah = s * 0.8;
+        ctx.beginPath();
+        ctx.rect(-aw / 2, -ah / 2, aw, ah);
+        ctx.fill();
+        ctx.stroke();
+        // Top surface detail
+        ctx.beginPath();
+        ctx.rect(-aw * 0.38, -ah * 0.35, aw * 0.76, ah * 0.7);
+        ctx.stroke();
+        // Decorative circles
+        ctx.beginPath();
+        ctx.arc(-aw * 0.25, 0, s * 0.08, 0, Math.PI * 2);
+        ctx.arc(aw * 0.25, 0, s * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+
+      case 'stairs': {
+        // Staircase — parallel lines with perspective narrowing
+        const sw = s * 0.9, sh = s * 1.4;
+        ctx.fillStyle = Style.floor;
+        ctx.beginPath();
+        ctx.rect(-sw / 2, -sh / 2, sw, sh);
+        ctx.fill();
+        ctx.stroke();
+        // Stair treads
+        const steps = 6;
+        for (let i = 1; i < steps; i++) {
+          const sy = -sh / 2 + (sh / steps) * i;
+          ctx.beginPath();
+          ctx.moveTo(-sw / 2, sy);
+          ctx.lineTo(sw / 2, sy);
+          ctx.stroke();
+        }
+        // Arrow
+        ctx.fillStyle = Style.ink;
+        ctx.beginPath();
+        ctx.moveTo(0, -sh * 0.4);
+        ctx.lineTo(-s * 0.15, -sh * 0.2);
+        ctx.lineTo(s * 0.15, -sh * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      default: {
+        ctx.fillStyle = Style.shading;
+        ctx.fillRect(-s * 0.5, -s * 0.5, s, s);
+        ctx.strokeRect(-s * 0.5, -s * 0.5, s, s);
+      }
     }
   }
 
@@ -1127,13 +1330,25 @@ export class Renderer {
   _drawLegend(ctx, dungeon) {
     const usedIcons = new Map(); // key → { label, symbol }
     const usedDoors = new Map(); // type → label
+    const usedProps = new Map(); // type → { label, symbol }
 
     const doorLabels = {
       open: 'Open Archway', door: 'Door', locked: 'Locked Door',
       secret: 'Secret Door', portcullis: 'Portcullis',
+      stairs_up: 'Stairs Up', stairs_down: 'Stairs Down',
     };
     const doorSymbols = {
       open: 'O', door: '▭', locked: '⊡', secret: 'S', portcullis: '≡',
+      stairs_up: '↑', stairs_down: '↓',
+    };
+
+    const propLabels = {
+      table: 'Table', chair: 'Chair', bed: 'Bed', chest: 'Chest',
+      barrel: 'Barrel', bookshelf: 'Bookshelf', altar: 'Altar', stairs: 'Stairs',
+    };
+    const propSymbols = {
+      table: '╥', chair: '╔', bed: '⊟', chest: '▣',
+      barrel: '◎', bookshelf: '≡', altar: '⊞', stairs: '⋮',
     };
 
     for (const room of dungeon.rooms) {
@@ -1150,12 +1365,18 @@ export class Renderer {
         usedDoors.set(door.type, { label: doorLabels[door.type] ?? door.type, symbol: doorSymbols[door.type] ?? '?' });
       }
     }
+    for (const prop of dungeon.props) {
+      if (!usedProps.has(prop.type)) {
+        usedProps.set(prop.type, { label: propLabels[prop.type] ?? prop.type, symbol: propSymbols[prop.type] ?? '?' });
+      }
+    }
 
-    if (usedIcons.size === 0 && usedDoors.size === 0) return;
+    if (usedIcons.size === 0 && usedDoors.size === 0 && usedProps.size === 0) return;
 
     const items = [];
     for (const [, info] of usedIcons) items.push({ symbol: info.symbol, label: info.label });
     for (const [, info] of usedDoors) items.push({ symbol: info.symbol, label: info.label });
+    for (const [, info] of usedProps) items.push({ symbol: info.symbol, label: info.label });
 
     const pad    = 8;
     const lh     = 16;

@@ -349,6 +349,14 @@ html, body {
   color: var(--text);
 }
 
+#tool-rail .rail-separator {
+  width: 28px;
+  height: 1px;
+  background: var(--text-muted);
+  opacity: 0.4;
+  margin: 3px auto;
+}
+
 /* ╔══════════════════════════════════════════════════════════════════════════╗
    ║  FLOATING PANELS                                                       ║
    ╚══════════════════════════════════════════════════════════════════════════╝ */

@@ -117,6 +117,15 @@
         <button class="tool-btn" data-tool="polygon" data-tooltip="Polygon Room (P)">△</button>
         <button class="tool-btn" data-tool="door" data-tooltip="Place Door (D)">⊞</button>
         <button class="tool-btn" data-tool="erase" data-tooltip="Erase (E)">✕</button>
+        <div class="rail-separator"></div>
+        <button class="tool-btn" data-tool="prop-table" data-tooltip="Table (1)">🪑</button>
+        <button class="tool-btn" data-tool="prop-chair" data-tooltip="Chair (2)">💺</button>
+        <button class="tool-btn" data-tool="prop-bed" data-tooltip="Bed (3)">🛏</button>
+        <button class="tool-btn" data-tool="prop-chest" data-tooltip="Chest (4)">📦</button>
+        <button class="tool-btn" data-tool="prop-barrel" data-tooltip="Barrel (5)">🛢</button>
+        <button class="tool-btn" data-tool="prop-bookshelf" data-tooltip="Bookshelf (6)">📚</button>
+        <button class="tool-btn" data-tool="prop-altar" data-tooltip="Altar (7)">⛩</button>
+        <button class="tool-btn" data-tool="prop-stairs" data-tooltip="Stairs (8)">🪜</button>
       </div>
 
       <!-- ── Style Panel (left floating) ── -->
@@ -337,6 +346,30 @@
                   </select>
                 </div>
                 <button id="btn-delete-door" class="panel-btn danger">Delete Door</button>
+              </div>
+
+              <div id="props-prop" style="display:none">
+                <div class="ctrl-row">
+                  <span>Decor Type</span>
+                  <select id="prop-prop-type">
+                    <option value="table">Table</option>
+                    <option value="chair">Chair</option>
+                    <option value="bed">Bed</option>
+                    <option value="chest">Chest</option>
+                    <option value="barrel">Barrel</option>
+                    <option value="bookshelf">Bookshelf</option>
+                    <option value="altar">Altar</option>
+                    <option value="stairs">Stairs</option>
+                  </select>
+                </div>
+                <div class="ctrl-row">
+                  <span>Rotate</span>
+                  <div style="display:flex;gap:4px">
+                    <button id="btn-prop-rot-ccw" class="panel-btn" title="Rotate CCW (Q)">↺</button>
+                    <button id="btn-prop-rot-cw" class="panel-btn" title="Rotate CW (W)">↻</button>
+                  </div>
+                </div>
+                <button id="btn-delete-prop" class="panel-btn danger">Delete Prop</button>
               </div>
             </div>
           </div>
